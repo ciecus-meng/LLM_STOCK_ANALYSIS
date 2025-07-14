@@ -1,5 +1,14 @@
 # 智能分析系统
 
+## 📝 二次开发说明
+
+本项目基于 [LargeCupPanda/StockAnal_Sys](https://github.com/LargeCupPanda/StockAnal_Sys) 项目进行二次开发。
+
+在原项目的基础上，主要进行了以下修复和增强：
+- **修复了美股和港股的数据接口问题**，确保能够稳定获取并分析美股（如NVDA）和港股的历史行情与基本信息。
+- **增强了数据接口的健壮性**，为部分`akshare`接口增加了备用数据源，并对返回数据进行校验，避免因上游数据格式变更或返回空值导致程序崩溃。
+- **优化了部分核心分析逻辑**，使其能够兼容A股、港股和美股的不同数据特性。
+
 ![版本](https://img.shields.io/badge/版本-2.1.0-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.7+-green.svg)
 ![Flask](https://img.shields.io/badge/Flask-2.0+-red.svg)
