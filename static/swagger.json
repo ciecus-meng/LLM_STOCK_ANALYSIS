@@ -1,9 +1,9 @@
 {
   "swagger": "2.0",
   "info": {
-    "title": "股票智能分析系统 API",
-    "description": "股票智能分析系统的REST API文档",
-    "version": "2.1.0"
+    "title": "股票智能分析系统 API文档",
+    "description": "提供股票分析、市场扫描、智能问答等功能的API",
+    "version": "2.2.0"
   },
   "host": "localhost:8888",
   "basePath": "/",

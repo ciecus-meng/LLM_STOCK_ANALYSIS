@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 智能分析系统（股票） - 股票市场数据分析系统
-修改：熊猫大侠
-版本：v2.1.0
+开发者：熊猫大侠
+版本：v2.2.0
+许可证：MIT License
 """
 # us_stock_service.py
 import akshare as ak
