@@ -223,7 +223,7 @@ class StockQA:
         """获取股票上下文信息"""
         try:
             # 获取股票信息
-            stock_info = self.analyzer.get_stock_info(stock_code)
+            stock_info = self.analyzer.get_stock_info(stock_code, market_type)
             stock_name = stock_info.get('股票名称', '未知')
             industry = stock_info.get('行业', '未知')
 

@@ -37,7 +37,7 @@ class ScenarioPredictor:
             df = self.analyzer.calculate_indicators(df)
 
             # 获取股票信息
-            stock_info = self.analyzer.get_stock_info(stock_code)
+            stock_info = self.analyzer.get_stock_info(stock_code, market_type)
 
             # 计算基础数据
             current_price = df.iloc[-1]['close']

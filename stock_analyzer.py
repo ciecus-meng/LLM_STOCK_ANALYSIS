@@ -84,9 +84,11 @@ class StockAnalyzer:
             start_date = (datetime.now() - timedelta(days=365)).strftime('%Y%m%d')
         if end_date is None:
             end_date = datetime.now().strftime('%Y%m%d')
+        self.logger.info(f"开始获取股票 {stock_code} 数据，市场类型: {market_type}，开始日期: {start_date}，结束日期: {end_date}")
 
         try:
             # 根据市场类型获取数据
+            df = None
             if market_type == 'A':
                 df = ak.stock_zh_a_hist(
                     symbol=stock_code,
@@ -94,31 +96,72 @@ class StockAnalyzer:
                     end_date=end_date,
                     adjust="qfq"
                 )
+                # A股返回的是中文列名，需要重命名
+                if df is not None and not df.empty:
+                    df = df.rename(columns={
+                        "日期": "date", "开盘": "open", "收盘": "close",
+                        "最高": "high", "最低": "low", "成交量": "volume",
+                        "成交额": "amount"
+                    })
             elif market_type == 'HK':
-                df = ak.stock_hk_daily(
-                    symbol=stock_code,
-                    adjust="qfq"
-                )
+                # 港股接口返回的是英文列名
+                df = ak.stock_hk_daily(symbol=stock_code, adjust="qfq")
+
             elif market_type == 'US':
-                df = ak.stock_us_hist(
-                    symbol=stock_code,
-                    start_date=start_date,
-                    end_date=end_date,
-                    adjust="qfq"
-                )
+                try:
+                    # 优先尝试使用东方财富接口
+                    self.logger.info(f"尝试使用东方财富接口获取 {stock_code} 的美股数据")
+                    df = ak.stock_us_hist(
+                        symbol=stock_code,
+                        period="daily",
+                        start_date=start_date,
+                        end_date=end_date,
+                        adjust="qfq"
+                    )
+                    # 美股返回的是中文列名，需要重命名
+                    if df is not None and not df.empty:
+                        df = df.rename(columns={
+                            "日期": "date", "开盘": "open", "收盘": "close",
+                            "最高": "high", "最低": "low", "成交量": "volume",
+                            "成交额": "amount"
+                        })
+                except Exception as e:
+                    self.logger.warning(f"使用东方财富接口获取美股 {stock_code} 数据失败: {e}，将尝试新浪接口")
+                    # 如果东方财富接口失败，尝试使用新浪接口作为备用
+                    df = ak.stock_us_daily(symbol=stock_code)
+                    if df is not None and not df.empty:
+                        # 新浪接口返回的列名已经是英文，但可能需要筛选日期
+                        df['date'] = pd.to_datetime(df['date'])
+                        start_date_dt = pd.to_datetime(start_date)
+                        end_date_dt = pd.to_datetime(end_date)
+                        df = df[(df['date'] >= start_date_dt) & (df['date'] <= end_date_dt)]
+
             else:
                 raise ValueError(f"不支持的市场类型: {market_type}")
 
-            # 重命名列名以匹配分析需求
-            df = df.rename(columns={
-                "日期": "date",
-                "开盘": "open",
-                "收盘": "close",
-                "最高": "high",
-                "最低": "low",
-                "成交量": "volume",
-                "成交额": "amount"
-            })
+            # 统一的后续处理
+            if df is None or df.empty:
+                self.logger.warning(f"未能获取到股票 {stock_code} ({market_type}) 的数据")
+                return pd.DataFrame()
+
+            # A股的列名在下面统一处理
+            if market_type == 'A':
+                 df = df.rename(columns={
+                    "日期": "date",
+                    "开盘": "open",
+                    "收盘": "close",
+                    "最高": "high",
+                    "最低": "low",
+                    "成交量": "volume",
+                    "成交额": "amount"
+                })
+
+            # 确保关键列存在
+            required_columns = ['date', 'open', 'close', 'high', 'low', 'volume']
+            for col in required_columns:
+                if col not in df.columns:
+                    self.logger.error(f"获取的数据中缺少关键列: {col}")
+                    raise KeyError(f"获取的数据中缺少关键列: {col}")
 
             # 确保日期格式正确
             df['date'] = pd.to_datetime(df['date'])
@@ -446,7 +489,7 @@ class StockAnalyzer:
                 # Strong downward momentum
                 momentum_score += 0
 
-            # 根据加权因子计算总分 - “共振公式”
+            # 根据加权因子计算总分 - "共振公式"
             final_score = (
                     trend_score * weights['trend'] / 0.30 +
                     volatility_score * weights['volatility'] / 0.15 +
@@ -455,7 +498,7 @@ class StockAnalyzer:
                     momentum_score * weights['momentum'] / 0.10
             )
 
-            # 特殊市场调整 - “市场适应机制”
+            # 特殊市场调整 - "市场适应机制"
             if market_type == 'US':
                 # 美国市场额外调整因素
                 # 检查是否为财报季
@@ -499,7 +542,7 @@ class StockAnalyzer:
     def calculate_position_size(self, stock_code, risk_percent=2.0, stop_loss_percent=5.0):
         """
         根据风险管理原则计算最佳仓位大小
-        实施时空共振系统的“仓位大小公式”
+        实施时空共振系统的"仓位大小公式"
 
         参数:
             stock_code: 要分析的股票代码
@@ -690,7 +733,7 @@ class StockAnalyzer:
 
     def check_consecutive_losses(self, trade_history, max_consecutive_losses=3):
         """
-        实施“冷静期风险控制” - 连续亏损后停止交易
+        实施"冷静期风险控制" - 连续亏损后停止交易
 
         参数:
             trade_history: 最近交易结果列表 (True 表示盈利, False 表示亏损)
@@ -714,7 +757,7 @@ class StockAnalyzer:
     def check_profit_taking(self, current_profit_percent, threshold=20.0):
         """
         当回报超过阈值时，实施获利了结机制
-        属于“能量守恒维度”的一部分
+        属于"能量守恒维度"的一部分
 
         参数:
             current_profit_percent: 当前利润百分比
@@ -1432,7 +1475,7 @@ class StockAnalyzer:
             prev = df.iloc[-2]
 
             # 获取基本信息
-            stock_info = self.get_stock_info(stock_code)
+            stock_info = self.get_stock_info(stock_code, market_type)
             stock_name = stock_info.get('股票名称', '未知')
             industry = stock_info.get('行业', '未知')
 
@@ -1569,7 +1612,7 @@ class StockAnalyzer:
 
             # 先获取股票信息再生成报告
             try:
-                stock_info = self.get_stock_info(stock_code)
+                stock_info = self.get_stock_info(stock_code, market_type)
                 stock_name = stock_info.get('股票名称', '未知')
                 industry = stock_info.get('行业', '未知')
 
@@ -1603,75 +1646,99 @@ class StockAnalyzer:
 
     # ======================== 新增功能 ========================#
 
-    def get_stock_info(self, stock_code):
+    def get_stock_info(self, stock_code, market_type='A'):
         """获取股票基本信息"""
         import akshare as ak
 
-        cache_key = f"{stock_code}_info"
+        cache_key = f"{stock_code}_{market_type}_info"
         if cache_key in self.data_cache:
             return self.data_cache[cache_key]
 
+        info_dict = {"股票名称": "未知", "行业": "未知", "地区": "未知"}
         try:
-            # 获取A股股票基本信息
-            stock_info = ak.stock_individual_info_em(symbol=stock_code)
+            if market_type == 'A':
+                # 获取A股股票基本信息
+                stock_info_df = ak.stock_individual_info_em(symbol=stock_code)
+                for _, row in stock_info_df.iterrows():
+                    if len(row) >= 2:
+                        info_dict[row.iloc[0]] = row.iloc[1]
 
-            # 修改：使用列名而不是索引访问数据
-            info_dict = {}
-            for _, row in stock_info.iterrows():
-                # 使用iloc安全地获取数据
-                if len(row) >= 2:  # 确保有至少两列
-                    info_dict[row.iloc[0]] = row.iloc[1]
+            elif market_type == 'HK':
+                # 获取所有港股信息，然后筛选
+                all_hk_stocks = ak.stock_hk_spot_em()
+                stock_info = all_hk_stocks[all_hk_stocks['代码'] == stock_code]
+                if not stock_info.empty:
+                    stock_data = stock_info.iloc[0]
+                    info_dict = {
+                        "股票名称": stock_data.get("名称", "未知"),
+                        "行业": "未知", # 港股接口不直接提供行业信息
+                        "最新价": stock_data.get("最新价", 0),
+                        "涨跌额": stock_data.get("涨跌额", 0),
+                        "涨跌幅": stock_data.get("涨跌幅", 0),
+                    }
 
-            # 获取股票名称
-            try:
-                stock_name = ak.stock_info_a_code_name()
+            elif market_type == 'US':
+                # 获取所有美股信息，然后筛选
+                all_us_stocks = ak.stock_us_spot_em()
+                stock_info = all_us_stocks[all_us_stocks['代码'] == stock_code]
+                if not stock_info.empty:
+                    stock_data = stock_info.iloc[0]
+                    info_dict = {
+                        "股票名称": stock_data.get("名称", "未知"),
+                        "行业": "未知", # 美股接口不直接提供行业信息
+                        "最新价": stock_data.get("最新价", 0),
+                        "涨跌额": stock_data.get("涨跌额", 0),
+                        "涨跌幅": stock_data.get("涨跌幅", 0),
+                    }
+            
+            # 统一获取和设置股票名称，提高准确性
+            if info_dict.get("股票名称", "未知") == "未知":
+                name = self._get_stock_name(stock_code, market_type)
+                if name != "未知":
+                    info_dict['股票名称'] = name
 
-                # 检查数据框是否包含预期的列
-                if '代码' in stock_name.columns and '名称' in stock_name.columns:
-                    # 尝试找到匹配的股票代码
-                    matched_stocks = stock_name[stock_name['代码'] == stock_code]
-                    if not matched_stocks.empty:
-                        name = matched_stocks['名称'].values[0]
-                    else:
-                        self.logger.warning(f"未找到股票代码 {stock_code} 的名称信息")
-                        name = "未知"
-                else:
-                    # 尝试使用不同的列名
-                    possible_code_columns = ['代码', 'code', 'symbol', '股票代码', 'stock_code']
-                    possible_name_columns = ['名称', 'name', '股票名称', 'stock_name']
-
-                    code_col = next((col for col in possible_code_columns if col in stock_name.columns), None)
-                    name_col = next((col for col in possible_name_columns if col in stock_name.columns), None)
-
-                    if code_col and name_col:
-                        matched_stocks = stock_name[stock_name[code_col] == stock_code]
-                        if not matched_stocks.empty:
-                            name = matched_stocks[name_col].values[0]
-                        else:
-                            name = "未知"
-                    else:
-                        self.logger.warning(f"股票信息DataFrame结构不符合预期: {stock_name.columns.tolist()}")
-                        name = "未知"
-            except Exception as e:
-                self.logger.error(f"获取股票名称时出错: {str(e)}")
-                name = "未知"
-
-            info_dict['股票名称'] = name
-
-            # 确保基本字段存在
-            if '行业' not in info_dict:
-                info_dict['行业'] = "未知"
-            if '地区' not in info_dict:
-                info_dict['地区'] = "未知"
-
-            # 增加更多日志来调试问题
-            self.logger.info(f"获取到股票信息: 名称={name}, 行业={info_dict.get('行业', '未知')}")
 
             self.data_cache[cache_key] = info_dict
             return info_dict
         except Exception as e:
-            self.logger.error(f"获取股票信息失败: {str(e)}")
-            return {"股票名称": "未知", "行业": "未知", "地区": "未知"}
+            self.logger.error(f"获取股票 {stock_code} ({market_type}) 信息失败: {str(e)}")
+            # 即使失败，也尝试获取名称
+            name = self._get_stock_name(stock_code, market_type)
+            info_dict['股票名称'] = name
+            self.data_cache[cache_key] = info_dict
+            return info_dict
+
+    def _get_stock_name(self, stock_code, market_type='A'):
+        """一个辅助函数，专门用于获取股票名称，增加代码复用性"""
+        import akshare as ak
+        try:
+            if market_type == 'A':
+                stock_name_df = ak.stock_info_a_code_name()
+                # 兼容akshare接口变化，列名可能是code或symbol
+                code_col = 'code' if 'code' in stock_name_df.columns else 'symbol'
+                matched_stocks = stock_name_df[stock_name_df[code_col] == stock_code]
+                if not matched_stocks.empty:
+                    return matched_stocks['name'].values[0]
+            elif market_type == 'HK':
+                 # 对于港股，代码通常是数字，需要补零到5位
+                stock_code_padded = stock_code.zfill(5)
+                stock_name_df = ak.stock_info_hk_name()
+                matched_stocks = stock_name_df[stock_name_df['code'] == stock_code_padded]
+                if not matched_stocks.empty:
+                    return matched_stocks['name'].values[0]
+            elif market_type == 'US':
+                # 根据用户提示，使用 get_us_stock_name
+                us_stocks_df = ak.get_us_stock_name()
+                matched_stocks = us_stocks_df[us_stocks_df['symbol'] == stock_code]
+                if not matched_stocks.empty:
+                    # 返回英文名
+                    return matched_stocks['name'].values[0]
+
+        except Exception as e:
+            self.logger.warning(f"通过名称映射表获取 {stock_code} 名称失败: {e}")
+        
+        return "未知"
+
 
     def identify_support_resistance(self, df):
         """识别支撑位和压力位"""

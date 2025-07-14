@@ -30,7 +30,15 @@ class CapitalFlowAnalyzer:
                     return cached_data
 
             # 从akshare获取数据
-            concept_data = ak.stock_fund_flow_concept(symbol=period)
+            # concept_data = ak.stock_fund_flow_concept(symbol=period)
+            concept_data = pd.DataFrame() # 初始化一个空的DataFrame
+            try:
+                concept_data = ak.stock_fund_flow_concept(symbol=period)
+            except ValueError as ve:
+                self.logger.error(f"ValueError from akshare for concept fund flow: {ve}")
+                # 当列名不匹配时，返回空列表而不是模拟数据
+                return []
+
 
             # 处理数据
             result = []
@@ -59,8 +67,8 @@ class CapitalFlowAnalyzer:
         except Exception as e:
             self.logger.error(f"Error getting concept fund flow: {str(e)}")
             self.logger.error(traceback.format_exc())
-            # 如果API调用失败则返回模拟数据
-            return self._generate_mock_concept_fund_flow(period)
+            # 如果API调用失败则返回空列表
+            return []
 
     def get_individual_fund_flow_rank(self, period="10日"):
         """获取个股资金流向排名"""
