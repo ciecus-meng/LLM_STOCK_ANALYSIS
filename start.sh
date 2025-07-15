@@ -8,6 +8,7 @@ APP_NAME="智能分析系统"
 APP_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PYTHON_CMD="python"
 SERVER_MODULE="web_server" # 改为模块名
+SERVER_SCRIPT="web_server.py" # 新增，用于文件检查
 PID_FILE="${APP_DIR}/.server.pid"
 LOG_FILE="${APP_DIR}/server.log"
 MONITOR_INTERVAL=30  # 监控检查间隔（秒）

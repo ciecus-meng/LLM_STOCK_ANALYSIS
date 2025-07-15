@@ -90,7 +90,7 @@ Session = sessionmaker(bind=engine)
 
 # 初始化数据库
 def init_db():
-    Base.metadata.create_all(engine)
+    Base.metadata.create_all(engine, checkfirst=True)
 
 
 # 获取数据库会话
