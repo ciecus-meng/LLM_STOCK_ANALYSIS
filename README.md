@@ -51,7 +51,7 @@ StockAnal_Sys/
 ├── web_server.py         # Web服务器主程序
 ├── requirements.txt      # Python依赖
 ├── README.md             # 项目说明
-└── .env                  # 环境变量配置文件 (需自行创建)
+└── .env                  # 环境变量配置文件 (需根据.env-example创建)
 ```
 
 ## 🚀 部署与运行
@@ -62,13 +62,24 @@ StockAnal_Sys/
     cd LLM_STOCK_ANALYSIS
     ```
 
-2.  **安装依赖**
+2.  **(推荐) 创建并激活 Conda 环境**
+    为了保持项目依赖的隔离，强烈建议使用 Conda 创建一个独立的环境。
+    ```bash
+    # 创建名为 stock_analyzer_env 的新环境 (推荐使用 Python 3.9 或更高版本)
+    conda create --name stock_analyzer_env python=3.9 -y
+
+    # 激活环境
+    conda activate stock_analyzer_env
+    ```
+    之后的所有操作都应在此激活的环境中进行。
+
+3.  **安装依赖**
     ```bash
     pip install -r requirements.txt
     ```
 
-3.  **配置环境变量**
-    在项目根目录创建一个 `.env` 文件，并填入必要的配置信息。这是配置管理的最佳实践，可避免敏感信息泄露。
+4.  **配置环境变量**
+    复制`.env-example`为 `.env` 文件，并填入必要的配置信息。这是配置管理的最佳实践，可避免敏感信息泄露。
     ```env
     # .env file
     # 数据库连接字符串, 若不配置则默认使用data目录下的SQLite
@@ -83,14 +94,9 @@ StockAnal_Sys/
     TAVILY_API_KEY=...
     ```
 
-4.  **启动服务**
+5.  **启动服务**
 
-    **方式一: 直接运行 (适用于开发)**
-    ```bash
-    python web_server.py
-    ```
-
-    **方式二: 使用管理脚本 (推荐用于部署)**
+    **方式一: 使用管理脚本 (推荐用于部署)**
     项目提供了 `start.sh` 脚本，用于更方便地管理应用生命周期：
     ```bash
     # 在后台启动服务
