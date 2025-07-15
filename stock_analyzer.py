@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-智能分析系统（股票） - 股票市场数据分析系统
-开发者：熊猫大侠
-版本：v2.2.0
-许可证：MIT License
-"""
+
 # stock_analyzer.py
 import time
 import traceback
@@ -1647,21 +1642,20 @@ class StockAnalyzer:
     # ======================== 新增功能 ========================#
 
     def get_stock_info(self, stock_code, market_type='A'):
-        """获取股票基本信息"""
-        import akshare as ak
-
-        cache_key = f"{stock_code}_{market_type}_info"
+        """获取单个股票的基本信息，如名称、行业等"""
+        cache_key = f"info_{stock_code}_{market_type}"
         if cache_key in self.data_cache:
             return self.data_cache[cache_key]
 
         info_dict = {"股票名称": "未知", "行业": "未知", "地区": "未知"}
         try:
-            if market_type == 'A':
-                # 获取A股股票基本信息
-                stock_info_df = ak.stock_individual_info_em(symbol=stock_code)
-                for _, row in stock_info_df.iterrows():
-                    if len(row) >= 2:
-                        info_dict[row.iloc[0]] = row.iloc[1]
+            import akshare as ak
+            # 使用 ak.stock_individual_info_em 获取更全面的信息
+            stock_info_df = ak.stock_individual_info_em(symbol=stock_code)
+            
+            if stock_info_df.empty:
+                self.logger.warning(f"无法获取股票 {stock_code} 的基本信息。")
+                return {"股票名称": stock_code, "行业": "未知"}
 
             elif market_type == 'HK':
                 # 获取所有港股信息，然后筛选

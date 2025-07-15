@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-智能分析系统（股票） - 股票市场数据分析系统
-开发者：熊猫大侠
-版本：v2.2.0
-许可证：MIT License
-"""
+
 # risk_monitor.py
 import pandas as pd
 import numpy as np

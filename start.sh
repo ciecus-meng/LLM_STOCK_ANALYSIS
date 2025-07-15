@@ -7,7 +7,7 @@
 APP_NAME="智能分析系统"
 APP_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PYTHON_CMD="python"
-SERVER_SCRIPT="web_server.py"
+SERVER_MODULE="web_server" # 改为模块名
 PID_FILE="${APP_DIR}/.server.pid"
 LOG_FILE="${APP_DIR}/server.log"
 MONITOR_INTERVAL=30  # 监控检查间隔（秒）
@@ -60,7 +60,7 @@ get_pid() {
         fi
     fi
     # 尝试通过进程名查找
-    local pid=$(pgrep -f "python.*${SERVER_SCRIPT}" 2>/dev/null)
+    local pid=$(pgrep -f "${PYTHON_CMD}.*${SERVER_MODULE}" 2>/dev/null)
     if [ -n "$pid" ]; then
         echo $pid
         return 0
@@ -80,8 +80,8 @@ start_server() {
     echo -e "${BLUE}正在启动${APP_NAME}...${NC}"
     cd "$APP_DIR"
 
-    # 使用nohup在后台启动服务
-    nohup $PYTHON_CMD $SERVER_SCRIPT > "$LOG_FILE" 2>&1 &
+    # 使用gunicorn启动，性能更好，更适合生产环境
+    nohup gunicorn -w 4 -b 0.0.0.0:8888 ${SERVER_MODULE}:app > "$LOG_FILE" 2>&1 &
     local new_pid=$!
 
     # 保存PID到文件
@@ -183,7 +183,7 @@ monitor_server() {
             if [ -z "$pid" ]; then
                 echo "$timestamp - 服务未运行，正在重启..." >> "${LOG_FILE}.monitor"
                 cd "$APP_DIR"
-                $PYTHON_CMD $SERVER_SCRIPT >> "$LOG_FILE" 2>&1 &
+                gunicorn -w 4 -b 0.0.0.0:8888 ${SERVER_MODULE}:app >> "$LOG_FILE" 2>&1 &
                 local new_pid=$!
                 echo $new_pid > "$PID_FILE"
                 echo "$timestamp - 服务已重启 (PID: $new_pid)" >> "${LOG_FILE}.monitor"
@@ -202,7 +202,7 @@ monitor_server() {
                     kill -9 $pid
                     sleep 2
                     cd "$APP_DIR"
-                    $PYTHON_CMD $SERVER_SCRIPT >> "$LOG_FILE" 2>&1 &
+                    gunicorn -w 4 -b 0.0.0.0:8888 ${SERVER_MODULE}:app >> "$LOG_FILE" 2>&1 &
                     local new_pid=$!
                     echo $new_pid > "$PID_FILE"
                     echo "$timestamp - 服务已重启 (PID: $new_pid)" >> "${LOG_FILE}.monitor"

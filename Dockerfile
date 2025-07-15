@@ -1,5 +1,5 @@
-# 使用Python 3.11基础镜像（因为你的依赖包兼容性更好）
-FROM python:3.11-slim
+# 使用官方Python镜像作为基础
+FROM python:3.9-slim
 
 # 设置工作目录
 WORKDIR /app
@@ -26,15 +26,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 复制requirements.txt
 COPY requirements.txt .
-
-# 安装Python依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制应用代码
+# 复制所有项目文件到工作目录
 COPY . .
 
-# 暴露端口（假设Flask应用运行在5000端口）
+# 暴露端口
 EXPOSE 8888
 
-# 使用gunicorn启动应用
-CMD ["gunicorn", "--bind", "0.0.0.0:8888", "--workers", "4", "web_server:app"] 
+# 使用Gunicorn启动应用
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:8888", "web_server:app"] 
