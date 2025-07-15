@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-智能分析系统（股票） - 股票市场数据分析系统
-修改：熊猫大侠
-版本：v2.2.0
-"""
+
 # web_server.py
 
 import numpy as np
@@ -24,7 +20,7 @@ from flask_caching import Cache
 import threading
 import sys
 from flask_swagger_ui import get_swaggerui_blueprint
-from database import get_session, StockInfo, AnalysisResult, Portfolio, USE_DATABASE
+from database import get_session, StockInfo, AnalysisResult, Portfolio, USE_DATABASE, init_db
 from dotenv import load_dotenv
 from industry_analyzer import IndustryAnalyzer
 from fundamental_analyzer import FundamentalAnalyzer
@@ -34,6 +30,7 @@ from stock_qa import StockQA
 from risk_monitor import RiskMonitor
 from index_industry_analyzer import IndexIndustryAnalyzer
 from news_fetcher import news_fetcher, start_news_scheduler
+import config
 
 # 加载环境变量
 load_dotenv()
@@ -1662,6 +1659,79 @@ def get_latest_news():
         app.logger.error(f"获取最新新闻数据时出错: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/scan_market_sync', methods=['POST'])
+def scan_market_sync():
+    """
+    同步执行市场扫描，并直接返回结果。
+    这是为了前后端分离改造而创建的同步版本API。
+    """
+    try:
+        data = request.json
+        stock_list = data.get('stock_list', [])
+        min_score = data.get('min_score', 60)
+        market_type = data.get('market_type', 'A')
+
+        if not stock_list:
+            return jsonify({'error': '请提供股票列表'}), 400
+
+        # 限制股票数量，避免请求超时
+        if len(stock_list) > 100:
+            app.logger.warning(f"同步扫描股票列表过长 ({len(stock_list)}只)，截取前100只")
+            stock_list = stock_list[:100]
+        
+        results = []
+        for stock_code in stock_list:
+            try:
+                report = analyzer.quick_analyze_stock(stock_code, market_type)
+                if report['score'] >= min_score:
+                    results.append(report)
+            except Exception as e:
+                app.logger.error(f"分析股票 {stock_code} 时出错: {str(e)}")
+                # 单个股票分析失败不应中断整个扫描
+                continue
+
+        # 按得分排序
+        results.sort(key=lambda x: x['score'], reverse=True)
+        
+        app.logger.info(f"同步扫描完成，找到 {len(results)} 只符合条件的股票")
+        return custom_jsonify({'results': results})
+
+    except Exception as e:
+        app.logger.error(f"同步扫描市场时出错: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/market_options', methods=['GET'])
+def get_market_options():
+    """提供市场扫描页面的下拉框选项"""
+    try:
+        # 定义支持的指数列表
+        supported_indices = {
+            'sh000300': '沪深300',
+            'sh000905': '中证500',
+            'sh000852': '中证1000',
+            'sh000001': '上证指数',
+            'sz399001': '深证成指',
+            'sz399006': '创业板指',
+            'sh000688': '科创50',
+            'hkHSI': '恒生指数',
+            'us.NDX': '纳斯达克100',
+            'us.SPX': '标普500'
+        }
+        
+        # 获取行业列表
+        industries = industry_analyzer.get_industry_list()
+        
+        options = {
+            "indices": supported_indices,
+            "industries": industries
+        }
+        return jsonify(options)
+    except Exception as e:
+        app.logger.error(f"获取市场选项失败: {e}")
+        return jsonify({"error": "获取市场选项失败"}), 500
+
+
 # 在应用启动时启动清理线程（保持原有代码不变）
 cleaner_thread = threading.Thread(target=run_task_cleaner)
 cleaner_thread.daemon = True
@@ -1669,4 +1739,4 @@ cleaner_thread.start()
 
 if __name__ == '__main__':
     # 将 host 设置为 '0.0.0.0' 使其支持所有网络接口访问
-    app.run(host='0.0.0.0', port=8888, debug=False)
+    app.run(host='0.0.0.0', port=config.PORT, debug=config.DEBUG)

@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-智能分析系统（股票） - 股票市场数据分析系统
-开发者：熊猫大侠
-版本：v2.2.0
-许可证：MIT License
-"""
+
 # industry_analyzer.py
 import logging
 import random
@@ -138,6 +133,15 @@ class IndustryAnalyzer:
             return str(float(value))
         except:
             return "0.00"
+
+    def get_industry_list(self):
+        """获取所有行业的列表"""
+        try:
+            industry_list_df = ak.stock_board_industry_name_em()
+            return sorted(industry_list_df['板块名称'].tolist())
+        except Exception as e:
+            self.logger.error(f"获取所有行业列表时出错: {str(e)}")
+            return []
 
     def _get_industry_code(self, industry_name):
         """获取行业名称对应的板块代码"""

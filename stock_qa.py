@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-智能分析系统（股票） - 股票市场数据分析系统
-开发者：熊猫大侠
-版本：v2.2.0
-许可证：MIT License
 
 stock_qa.py - 提供股票相关问题的智能问答功能，支持联网搜索实时信息和多轮对话
 """
@@ -14,18 +10,19 @@ import traceback
 import openai
 from urllib.parse import urlparse
 from datetime import datetime
+import config
 
 
 class StockQA:
     def __init__(self, analyzer, openai_api_key=None, openai_model=None):
         self.analyzer = analyzer
-        self.openai_api_key = os.getenv('OPENAI_API_KEY', openai_api_key)
-        self.openai_api_url = os.getenv('OPENAI_API_URL', 'https://api.openai.com/v1')
-        self.openai_model = os.getenv('OPENAI_API_MODEL', openai_model or 'gpt-4o')
-        self.function_call_model = os.getenv('FUNCTION_CALL_MODEL', openai_model or 'gpt-4o')
+        self.openai_api_key = config.OPENAI_API_KEY
+        self.openai_api_url = os.getenv('OPENAI_API_URL', 'https://api.openai.com/v1') # 保留os.getenv作为兼容
+        self.openai_model = config.OPENAI_API_MODEL or openai_model or 'gpt-4o'
+        self.function_call_model = config.FUNCTION_CALL_MODEL or openai_model or 'gpt-4o'
         self.serp_api_key = os.getenv('SERP_API_KEY')
-        self.tavily_api_key = os.getenv('TAVILY_API_KEY')
-        self.max_qa_rounds = int(os.getenv('MAX_QA', '10'))  # 默认保留10轮对话
+        self.tavily_api_key = config.TAVILY_API_KEY
+        self.max_qa_rounds = int(config.MAX_QA_ROUNDS or 10)  # 默认保留10轮对话
         
         # 对话历史存储 - 使用字典存储不同股票的对话历史
         self.conversation_history = {}

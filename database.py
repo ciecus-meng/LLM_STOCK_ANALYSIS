@@ -3,10 +3,11 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
+import config
 
 # 读取配置
-DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///data/stock_analyzer.db')
-USE_DATABASE = os.getenv('USE_DATABASE', 'False').lower() == 'true'
+DATABASE_URL = config.DATABASE_URL or 'sqlite:///data/stock_analyzer.db'
+USE_DATABASE = bool(config.DATABASE_URL)
 
 # 创建引擎
 engine = create_engine(DATABASE_URL)

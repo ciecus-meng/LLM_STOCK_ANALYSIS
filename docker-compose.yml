@@ -10,7 +10,7 @@ services:
       - FLASK_DEBUG=0
       - FLASK_APP=web_server.py
     volumes:
-    #  - sqlite_data:/app/data # 如果需要持久化数据，请使用sqlite_data 在env文件中设置USE_DATABASE=True
+      - sqlite_data:/app/data # 如果需要持久化数据，请使用sqlite_data 在env文件中设置USE_DATABASE=True
       - .env:/app/.env # 环境变量.env文件
     depends_on:
       - redis
@@ -24,4 +24,4 @@ services:
 
 volumes:
   redis_data:
-  #sqlite_data: 
+  sqlite_data: 
