@@ -191,1509 +191,436 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
             <h4 id="stock-title" class="mb-0 fw-bold">
-                <span class="shimmer-bg" style="width: 200px; height: 24px;"></span>
+                {{ stock_name }} ({{ stock_code }})
             </h4>
             <p id="stock-info" class="text-muted mb-0 small">
-                <span class="shimmer-bg" style="width: 150px; height: 16px;"></span>
+                {{ industry }}
             </p>
         </div>
         <div class="d-flex align-items-center">
-            <select class="form-select form-select-sm me-2" id="market-type" style="max-width: 100px;">
-                <option value="A" {% if market_type == 'A' %}selected{% endif %}>A股</option>
-                <option value="HK" {% if market_type == 'HK' %}selected{% endif %}>港股</option>
-                <option value="US" {% if market_type == 'US' %}selected{% endif %}>美股</option>
-            </select>
-            <select class="form-select form-select-sm me-2" id="analysis-period" style="max-width: 100px;">
-                <option value="1m">1个月</option>
-                <option value="3m">3个月</option>
-                <option value="6m">6个月</option>
-                <option value="1y" selected>1年</option>
-            </select>
-            <button id="refresh-btn" class="btn btn-primary btn-sm">
+            <button id="refresh-btn" class="btn btn-primary btn-sm" title="刷新分析">
                 <i class="fas fa-sync-alt"></i>
             </button>
         </div>
     </div>
 
-    <!-- 系统指标区域 - 始终显示，但先显示加载状态 -->
-    <div id="system-indicators">
-        <!-- 第一行：股票概要和评分 -->
-        <div class="row g-3 mb-3">
-            <!-- 股票概要卡片 -->
-            <div class="col-md-4">
-                <div class="card price-card h-100">
-                    <div class="card-body position-relative">
-                        <span id="market-badge" class="badge market-badge"></span>
-                        <div class="row align-items-center">
-                            <div class="col-7">
-                                <div id="price-container">
-                                    <div class="shimmer-bg" style="width: 120px; height: 32px;"></div>
-                                    <div class="shimmer-bg mt-1" style="width: 80px; height: 20px;"></div>
-                                </div>
-                            </div>
-                            <div class="col-5 text-end">
-                                <div id="recommendation-container">
-                                    <div class="shimmer-bg" style="width: 100px; height: 24px;"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row mt-3">
-                            <div class="col-12">
-                                <div class="d-flex justify-content-between text-muted small">
-                                    <span>今开：<span id="open-price">--</span></span>
-                                    <span>最高：<span id="high-price">--</span></span>
-                                    <span>最低：<span id="low-price">--</span></span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- 评分卡片 -->
-            <div class="col-md-4">
-                <div class="card h-100">
-                    <div class="card-header py-2">
-                        <h5 class="mb-0">综合评分</h5>
-                    </div>
-                    <div class="card-body text-center">
-                        <div id="score-container" class="d-flex align-items-center justify-content-center">
-                            <div class="shimmer-bg rounded-circle" style="width: 120px; height: 120px;"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- 技术指标卡片 -->
-            <div class="col-md-4">
-                <div class="card h-100">
-                    <div class="card-header py-2">
-                        <h5 class="mb-0">关键指标</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-6">
-                                <div class="quick-stat">
-                                    <div id="rsi-container">
-                                        <div class="shimmer-bg mx-auto" style="width: 50px; height: 24px;"></div>
-                                        <div class="shimmer-bg mx-auto mt-1" style="width: 40px; height: 16px;"></div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="quick-stat">
-                                    <div id="ma-trend-container">
-                                        <div class="shimmer-bg mx-auto" style="width: 50px; height: 24px;"></div>
-                                        <div class="shimmer-bg mx-auto mt-1" style="width: 40px; height: 16px;"></div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="quick-stat">
-                                    <div id="macd-container">
-                                        <div class="shimmer-bg mx-auto" style="width: 50px; height: 24px;"></div>
-                                        <div class="shimmer-bg mx-auto mt-1" style="width: 40px; height: 16px;"></div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="quick-stat">
-                                    <div id="volume-container">
-                                        <div class="shimmer-bg mx-auto" style="width: 50px; height: 24px;"></div>
-                                        <div class="shimmer-bg mx-auto mt-1" style="width: 40px; height: 16px;"></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+    <!-- 报告选择和对比区域 -->
+    <div class="row g-3 mb-3">
+        <div class="col-md-5">
+            <div class="input-group">
+                <span class="input-group-text"><i class="fas fa-calendar-alt"></i></span>
+                <select class="form-select" id="report-selector-1"></select>
             </div>
         </div>
-
-        <!-- 第二行：图表区域 -->
-        <div class="row g-3 mb-3">
-            <div class="col-12">
-                <div class="card chart-card">
-                    <div class="card-header py-2">
-                        <ul class="nav nav-tabs card-header-tabs" id="chartTabs" role="tablist">
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link active" id="price-tab" data-bs-toggle="tab" data-bs-target="#price-content" type="button" role="tab" aria-controls="price-content" aria-selected="true">价格趋势</button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="indicators-tab" data-bs-toggle="tab" data-bs-target="#indicators-content" type="button" role="tab" aria-controls="indicators-content" aria-selected="false">技术指标</button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="volume-tab" data-bs-toggle="tab" data-bs-target="#volume-content" type="button" role="tab" aria-controls="volume-content" aria-selected="false">成交量</button>
-                            </li>
-                        </ul>
-                    </div>
-                    <div class="tab-content" id="chartTabsContent">
-                        <div class="tab-pane fade show active" id="price-content" role="tabpanel" aria-labelledby="price-tab">
-                            <div id="price-chart" style="height: 400px;"></div>
-                        </div>
-                        <div class="tab-pane fade" id="indicators-content" role="tabpanel" aria-labelledby="indicators-tab">
-                            <div id="indicators-chart" style="height: 400px;"></div>
-                        </div>
-                        <div class="tab-pane fade" id="volume-content" role="tabpanel" aria-labelledby="volume-tab">
-                            <div id="volume-chart" style="height: 400px;"></div>
-                        </div>
-                    </div>
-                </div>
+        <div class="col-md-5">
+            <div class="input-group">
+                <span class="input-group-text"><i class="fas fa-columns"></i></span>
+                <select class="form-select" id="report-selector-2" disabled>
+                    <option value="">选择报告进行对比...</option>
+                </select>
             </div>
         </div>
-
-        <!-- 第三行：支撑压力位和雷达图 -->
-        <div class="row g-3 mb-3">
-            <div class="col-md-6">
-                <div class="card h-100">
-                    <div class="card-header py-2">
-                        <h5 class="mb-0">支撑与压力位</h5>
-                    </div>
-                    <div class="card-body">
-                        <div id="support-resistance-container">
-                            <div class="shimmer-bg" style="width: 100%; height: 120px;"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card h-100">
-                    <div class="card-header py-2">
-                        <h5 class="mb-0">多维度评分</h5>
-                    </div>
-                    <div class="card-body">
-                        <div id="radar-chart-container">
-                            <div class="shimmer-bg" style="width: 100%; height: 200px;"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <div class="col-md-2 d-grid">
+            <button class="btn btn-outline-secondary" id="compare-btn" data-bs-toggle="button">对比模式</button>
         </div>
     </div>
 
-    <!-- AI分析区域 - 始终显示，但异步加载内容 -->
-    <div class="row g-3 mb-3">
-        <div class="col-12">
+    <!-- 加载和状态指示器 -->
+    <div id="analysis-status-indicator" class="alert alert-info" style="display: none;"></div>
+
+    <div class="row">
+        <!-- 主分析报告 -->
+        <div class="col-lg-12" id="report-container-1">
+            <!-- 占位符，内容将由JS填充 -->
+        </div>
+        
+        <!-- 对比分析报告 -->
+        <div class="col-lg-6" id="report-container-2" style="display: none;">
+            <!-- 占位符，内容将由JS填充 -->
+        </div>
+    </div>
+
+    <!-- K线图和用户备注 -->
+    <div class="row g-3 mt-3">
+        <div class="col-lg-8">
             <div class="card">
-                <div class="card-header py-2 d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">AI分析报告</h5>
-                    <div>
-                        <span id="ai-analysis-status" class="badge bg-info">准备分析...</span>
-                    </div>
+                <div class="card-header">K线图</div>
+                <div class="card-body">
+                    <div id="k-line-chart" style="width: 100%; height: 500px;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">我的备注</h6>
                 </div>
                 <div class="card-body">
-                    <div class="ai-analysis-container">
-                        <!-- AI分析加载动画 -->
-                        <div id="ai-analysis-loader" class="ai-analysis-loader">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">正在分析...</span>
-                            </div>
-                            <p class="mt-3 mb-0">正在对 <span id="ai-analysis-stock-name">该股票</span> 进行智能分析</p>
-                            <p class="text-muted small mt-1">
-                                已用时 <span id="ai-processing-time">0</span> 秒
-                            </p>
-                            <div class="typing-indicator mt-2">
-                                <span></span>
-                                <span></span>
-                                <span></span>
-                            </div>
-                            <div class="progress mt-3" style="width: 250px;">
-                                <div id="ai-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
-                            </div>
-                            <button id="cancel-analysis-btn" class="btn btn-outline-secondary btn-sm mt-3">
-                                <i class="fas fa-times"></i> 取消分析
-                            </button>
-                        </div>
-                        
-                        <!-- AI分析内容 -->
-                        <div id="ai-analysis-content" class="ai-analysis-content" style="opacity: 0;">
-                            <div id="ai-analysis" class="analysis-section">
-                                <!-- AI分析内容将异步填充 -->
-                            </div>
-                        </div>
+                    <textarea id="user-note-input" class="form-control mb-2" rows="5" placeholder="记录你对这只股票的看法、操作计划等..."></textarea>
+                    <button id="save-note-btn" class="btn btn-primary btn-sm">保存备注</button>
+                    <hr>
+                    <div id="notes-history">
+                        <p class="text-muted text-center">正在加载历史备注...</p>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    
-    <!-- 加载错误时显示的重试按钮 -->
-    <div id="error-retry" class="text-center mt-3" style="display: none;">
-        <div class="alert alert-warning">
-            <p><i class="fas fa-exclamation-triangle"></i> 分析过程中遇到错误</p>
-            <button id="retry-button" class="btn btn-primary mt-2">
-                <i class="fas fa-sync-alt"></i> 重试分析
-            </button>
-        </div>
-    </div>
+
 </div>
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.3.3/dist/echarts.min.js"></script>
 <script>
+document.addEventListener('DOMContentLoaded', function () {
+
+    // --- DOM Elements ---
     const stockCode = '{{ stock_code }}';
-    let marketType = '{{ market_type }}';
-    let period = '1y';
-    let stockData = [];
-    let analysisResult = null;
-    let processingTimer;
-    let processingTime = 0;
-    
-    // 页面加载时的闪烁效果
-    function addShimmerEffect() {
-        let style = document.createElement('style');
-        style.innerHTML = `
-            .shimmer-bg {
-                background: #f6f7f8;
-                background-image: linear-gradient(to right, #f6f7f8 0%, #edeef1 20%, #f6f7f8 40%, #f6f7f8 100%);
-                background-repeat: no-repeat;
-                background-size: 800px 104px;
-                display: inline-block;
-                position: relative;
-                animation-duration: 1.5s;
-                animation-fill-mode: forwards;
-                animation-iteration-count: infinite;
-                animation-name: shimmer;
-                animation-timing-function: linear;
-                border-radius: 4px;
-            }
-            @keyframes shimmer {
-                0% { background-position: -468px 0 }
-                100% { background-position: 468px 0 }
-            }
+    const marketType = '{{ market_type }}';
+    const statusIndicator = document.getElementById('analysis-status-indicator');
+    const reportContainer1 = document.getElementById('report-container-1');
+    const reportContainer2 = document.getElementById('report-container-2');
+    const reportSelector1 = document.getElementById('report-selector-1');
+    const reportSelector2 = document.getElementById('report-selector-2');
+    const compareBtn = document.getElementById('compare-btn');
+    const refreshBtn = document.getElementById('refresh-btn');
+    const noteInput = document.getElementById('user-note-input');
+    const saveNoteBtn = document.getElementById('save-note-btn');
+    const notesHistory = document.getElementById('notes-history');
+    const kLineChartDom = document.getElementById('k-line-chart');
+    const kLineChart = echarts.init(kLineChartDom);
+
+    let pollingInterval;
+
+    // --- Core Functions ---
+
+    function showAlert(message, type = 'info') {
+        const alertsContainer = document.getElementById('alerts-container');
+        const alert = `
+            <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
         `;
-        document.head.appendChild(style);
+        alertsContainer.innerHTML += alert;
     }
 
-    $(document).ready(function() {
-        addShimmerEffect();
-        
-        // 初始加载
-        loadStockData();
+    function setStatus(message, showSpinner = false) {
+        let spinner = showSpinner ? '<div class="spinner-border spinner-border-sm me-2" role="status"><span class="visually-hidden">Loading...</span></div>' : '';
+        statusIndicator.innerHTML = `${spinner} ${message}`;
+        statusIndicator.style.display = 'block';
+    }
 
-        // 刷新按钮点击事件
-        $('#refresh-btn').click(function() {
-            marketType = $('#market-type').val();
-            period = $('#analysis-period').val();
-            loadStockData();
-        });
+    function hideStatus() {
+        statusIndicator.style.display = 'none';
+    }
 
-        // 市场类型改变事件
-        $('#market-type').change(function() {
-            marketType = $(this).val();
-        });
+    function pollForTaskStatus(taskId) {
+        if (pollingInterval) clearInterval(pollingInterval);
 
-        // 分析周期改变事件
-        $('#analysis-period').change(function() {
-            period = $(this).val();
-        });
-        
-        // 取消分析按钮
-        $('#cancel-analysis-btn').click(function() {
-            cancelAnalysis();
-        });
-        
-        // 重试按钮
-        $('#retry-button').click(function() {
-            $('#error-retry').hide();
-            startAIAnalysis();
-        });
-    });
+        pollingInterval = setInterval(async () => {
+            try {
+                const response = await fetch(`/api/get_task_status/${taskId}`);
+                if (!response.ok) throw new Error('Network response was not ok.');
+                const result = await response.json();
 
-    // 加载股票数据
-    function loadStockData() {
-        resetUI();
-        showSystemLoadingState();
-        
-        // 获取股票数据
-        $.ajax({
-            url: `/api/stock_data?stock_code=${stockCode}&market_type=${marketType}&period=${period}`,
-            type: 'GET',
-            dataType: 'json',
-            success: function(response) {
-                if (!response.data || response.data.length === 0) {
-                    hideSystemLoadingState();
-                    showError('未找到股票数据');
-                    return;
+                if (result.status === 'completed') {
+                    clearInterval(pollingInterval);
+                    hideStatus();
+                    showAlert('分析报告已生成！', 'success');
+                    renderReport(reportContainer1, result.report.report_content);
+                    fetchHistoricalReports(); // Refresh history
+                } else if (result.status === 'failed') {
+                    clearInterval(pollingInterval);
+                    setStatus(`任务失败: ${result.error || '未知错误'}`, false);
+                } else {
+                    setStatus(`分析任务正在进行中 (${result.status})...`, true);
                 }
-
-                stockData = response.data;
-                
-                // 渲染系统指标部分
-                renderSystemIndicators();
-                
-                // 系统指标加载完成后，异步启动AI分析
-                startAIAnalysis();
-            },
-            error: function(xhr, status, error) {
-                hideSystemLoadingState();
-                
-                let errorMsg = '获取股票数据失败';
-                if (xhr.responseJSON && xhr.responseJSON.error) {
-                    errorMsg += ': ' + xhr.responseJSON.error;
-                } else if (error) {
-                    errorMsg += ': ' + error;
-                }
-                showError(errorMsg);
+            } catch (error) {
+                console.error('Error polling task status:', error);
+                setStatus('无法获取任务状态，请检查网络连接。', false);
+                clearInterval(pollingInterval);
             }
-        });
+        }, 3000);
     }
-    
-    // 重置UI状态
-    function resetUI() {
-        // 停止计时器
-        if (processingTimer) {
-            clearInterval(processingTimer);
-            processingTimer = null;
-        }
-        processingTime = 0;
-        
-        // 隐藏错误重试区域
-        $('#error-retry').hide();
-        
-        // 重置AI分析区域
-        $('#ai-analysis-status').text('准备分析...').removeClass('bg-success bg-danger').addClass('bg-info');
-        $('#ai-analysis-content').css('opacity', '0');
-        $('#ai-analysis-loader').show();
-        $('#ai-progress-bar').css('width', '0%');
-        $('#ai-processing-time').text('0');
-    }
-    
-    // 显示系统指标加载状态
-    function showSystemLoadingState() {
-        // 已通过闪烁效果展示
-    }
-    
-    // 隐藏系统指标加载状态
-    function hideSystemLoadingState() {
-        // 闪烁效果会在渲染实际内容时被替换
-    }
-    
-    // 渲染系统指标部分
-    function renderSystemIndicators() {
+
+    async function requestAnalysis() {
+        setStatus('正在请求AI分析报告，请稍候...', true);
+        reportContainer1.innerHTML = getReportPlaceholder(); // Show skeleton loader
         try {
-            if (!stockData || stockData.length === 0) {
-                showError("无可用数据");
-                return;
+            const response = await fetch('/api/request_analysis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stock_code: stockCode, market_type: marketType })
+            });
+
+            if (!response.ok) throw new Error('Failed to request analysis.');
+            
+            const result = await response.json();
+
+            if (result.status === 'completed') {
+                hideStatus();
+                renderReport(reportContainer1, result.report.report_content);
+            } else if (result.status === 'pending' || result.status === 'in_progress') {
+                setStatus('已提交分析任务，后台正在处理中...', true);
+                pollForTaskStatus(result.task_id);
+            } else {
+                throw new Error(result.error || '未知的响应状态');
             }
-            
-            const latestData = stockData[stockData.length - 1];
-            const prevData = stockData.length > 1 ? stockData[stockData.length - 2] : latestData;
-            
-            // 设置标题和基本信息
-            updateStockInfo(latestData);
-            
-            // 渲染价格图表
-            renderPriceChart();
-            
-            // 渲染指标图表
-            renderIndicatorsChart();
-            
-            // 渲染成交量图表
-            renderVolumeChart();
-            
-            // 获取或计算支撑压力位
-            calculateAndRenderSupportResistance(latestData);
-            
-            // 计算并渲染技术评分
-            calculateAndRenderScore(latestData);
-            
-            // 隐藏加载状态
-            hideSystemLoadingState();
         } catch (error) {
-            console.error("渲染系统指标时出错:", error);
-            showError("渲染系统指标时出错: " + error.message);
+            console.error('Error requesting analysis:', error);
+            setStatus(`请求分析失败: ${error.message}`, false);
         }
     }
 
-    // 添加到全局作用域
-    function safeGet(obj, path, defaultValue) {
-        if (!obj) return defaultValue;
-        
-        const props = path.split('.');
-        let current = obj;
-        
-        for (let i = 0; i < props.length; i++) {
-            if (current === undefined || current === null) {
-                console.warn(`属性路径 ${path} 在 ${props.slice(0, i).join('.')} 处中断`);
-                return defaultValue;
+    async function fetchHistoricalReports() {
+        try {
+            const response = await fetch(`/api/get_historical_reports?stock_code=${stockCode}&market_type=${marketType}`);
+            if (!response.ok) throw new Error('Failed to fetch historical reports.');
+            const reports = await response.json();
+
+            reportSelector1.innerHTML = '';
+            reportSelector2.innerHTML = '<option value="">选择报告进行对比...</option>';
+
+            if (reports.length > 0) {
+                reports.forEach(report => {
+                    const optionText = `${report.report_date} ${String(report.report_hour).padStart(2, '0')}:00`;
+                    const option1 = new Option(optionText, report.id);
+                    const option2 = new Option(optionText, report.id);
+                    reportSelector1.add(option1);
+                    reportSelector2.add(option2);
+                });
+                // Load the latest report by default
+                const latestReport = reports[0];
+                renderReport(reportContainer1, latestReport.report_content);
+            } else {
+                reportSelector1.innerHTML = '<option value="">无可用报告</option>';
+                // If no reports, trigger a new analysis
+                requestAnalysis();
             }
-            current = current[props[i]];
+        } catch (error) {
+            console.error('Error fetching historical reports:', error);
+            reportContainer1.innerHTML = `<div class="alert alert-danger">无法加载历史报告。</div>`;
         }
-        
-        return current !== undefined && current !== null ? current : defaultValue;
     }
     
-    // 更新股票基本信息
-    function updateStockInfo(latestData) {
-
-        console.info('数据集📚:', latestData);
-
-        // 获取最新价格和涨跌
-        const currentPrice = parseFloat(latestData.close);
-        const previousPrice = stockData.length > 1 ? parseFloat(stockData[stockData.length - 2].close) : currentPrice;
-        const priceChange = currentPrice - previousPrice;
-        const priceChangePercent = (priceChange / previousPrice) * 100;
-        
-        // 初始设置占位值，等待AI分析结果
-        let stockName = "加载中...";
-        let industry = "行业数据加载中...";
-    
-        // 设置页面中的股票代码和默认值
-        $('#stock-title').html(`${stockName} <span class="text-muted">${stockCode}</span>`);
-        $('#stock-info').text(`${industry} | 数据日期: ${new Date(latestData.date).toLocaleDateString()}`);
-    
-        
-        // 更新股票标题
-        // const stockName = latestData.stockName || "未知";
-        // $('#stock-title').html(`${stockName} <span class="text-muted">${stockCode}</span>`);
-        
-        // 根据市场类型显示不同标签
-        let marketBadge = '';
-        if (marketType === 'A') {
-            marketBadge = '<span class="badge bg-primary">A股</span>';
-        } else if (marketType === 'HK') {
-            marketBadge = '<span class="badge bg-success">港股</span>';
-        } else if (marketType === 'US') {
-            marketBadge = '<span class="badge bg-info">美股</span>';
-        }
-        $('#market-badge').html(marketBadge);
-        
-        // 更新股票信息
-        // const industry = latestData.industry || "未知行业";
-        const date = new Date(latestData.date).toLocaleDateString();
-        // $('#stock-info').text(`${industry} | 数据日期: ${date}`);
-        
-        // 更新价格
-        const priceChangeClass = priceChange >= 0 ? 'trend-up' : 'trend-down';
-        const priceChangeIcon = priceChange >= 0 ? '<i class="fas fa-caret-up"></i>' : '<i class="fas fa-caret-down"></i>';
-        const priceChangeDisplay = `${priceChangeIcon} ${Math.abs(priceChange).toFixed(2)} (${Math.abs(priceChangePercent).toFixed(2)}%)`;
-        
-        $('#price-container').html(`
-            <div class="stock-price ${priceChangeClass}">${currentPrice.toFixed(2)}</div>
-            <div class="price-change ${priceChangeClass}">${priceChangeDisplay}</div>
-        `);
-        
-        // 更新开盘、最高、最低价格
-        $('#open-price').text(latestData.open ? parseFloat(latestData.open).toFixed(2) : '--');
-        $('#high-price').text(latestData.high ? parseFloat(latestData.high).toFixed(2) : '--');
-        $('#low-price').text(latestData.low ? parseFloat(latestData.low).toFixed(2) : '--');
-        
-        // 更新AI分析股票名称
-        $('#ai-analysis-stock-name').text(stockName);
-    }
-    
-    // 计算技术评分并渲染
-    function calculateAndRenderScore(latestData) {
-        // 示例技术评分计算 (简化版)
-        let score = 0;
-        
-        // RSI评分 (0-25)
-        const rsi = parseFloat(latestData.RSI || 50);
-        if (rsi >= 40 && rsi <= 60) score += 20;
-        else if ((rsi >= 30 && rsi < 40) || (rsi > 60 && rsi <= 70)) score += 15;
-        else if (rsi < 30) score += 10;
-        else if (rsi > 70) score += 5;
-        
-        // 均线趋势评分 (0-25)
-        const ma5 = parseFloat(latestData.MA5 || 0);
-        const ma20 = parseFloat(latestData.MA20 || 0);
-        const ma60 = parseFloat(latestData.MA60 || 0);
-        if (ma5 > ma20 && ma20 > ma60) score += 25;
-        else if (ma5 > ma20) score += 15;
-        else if (ma20 > ma60) score += 10;
-        else score += 0;
-        
-        // MACD评分 (0-25)
-        const macd = parseFloat(latestData.MACD || 0);
-        const signal = parseFloat(latestData.Signal || 0);
-        if (macd > signal && macd > 0) score += 25;
-        else if (macd > signal) score += 15;
-        else if (macd > 0) score += 10;
-        else score += 0;
-        
-        // 成交量评分 (0-25)
-        const volRatio = parseFloat(latestData.Volume_Ratio || 1);
-        if (volRatio > 1.5 && ma5 > ma20) score += 25;
-        else if (volRatio > 1) score += 15;
-        else if (volRatio > 0.8) score += 10;
-        else score += 0;
-        
-        // 渲染评分
-        const scoreClass = getScoreColorClass(score);
-        const scoreText = getScoreDescription(score);
-        
-        $('#score-container').html(`
-            <div class="score-indicator">
-                <div id="score-chart"></div>
-                <div class="score-display">
-                    <p class="score-value">${score}</p>
-                    <p class="score-label">综合评分</p>
+    function getReportPlaceholder() {
+        return `
+            <div class="card">
+                <div class="card-body">
+                    <div class="shimmer-bg" style="height: 30px; width: 60%; margin-bottom: 1rem;"></div>
+                    <div class="shimmer-bg" style="height: 20px; width: 80%; margin-bottom: 0.5rem;"></div>
+                    <div class="shimmer-bg" style="height: 20px; width: 75%; margin-bottom: 1.5rem;"></div>
+                    <div class="shimmer-bg" style="height: 100px; width: 100%;"></div>
                 </div>
             </div>
-        `);
-        
-        // 渲染环形图表
-        renderScoreChart(score);
-        
-        // 渲染建议
-        $('#recommendation-container').html(`
-            <div class="badge badge-pill ${scoreClass} px-3 py-2">${scoreText}</div>
-        `);
-        
-        // 渲染关键指标
-        $('#rsi-container').html(`
-            <div class="stat-value">${rsi.toFixed(1)}</div>
-            <div class="stat-label">RSI</div>
-        `);
-        
-        const maTrend = ma5 > ma20 ? 'trend-up' : 'trend-down';
-        const maTrendIcon = ma5 > ma20 ? '<i class="fas fa-arrow-up"></i>' : '<i class="fas fa-arrow-down"></i>';
-        const maTrendText = ma5 > ma20 ? '多头排列' : '空头排列';
-        
-        $('#ma-trend-container').html(`
-            <div class="stat-value ${maTrend}">${maTrendIcon}</div>
-            <div class="stat-label">均线趋势</div>
-        `);
-        
-        const macdTrend = macd > signal ? 'trend-up' : 'trend-down';
-        const macdTrendIcon = macd > signal ? '<i class="fas fa-arrow-up"></i>' : '<i class="fas fa-arrow-down"></i>';
-        
-        $('#macd-container').html(`
-            <div class="stat-value ${macdTrend}">${macdTrendIcon}</div>
-            <div class="stat-label">MACD</div>
-        `);
-        
-        const volumeStatus = volRatio > 1 ? 'trend-up' : 'trend-down';
-        const volumeIcon = volRatio > 1 ? '<i class="fas fa-arrow-up"></i>' : '<i class="fas fa-arrow-down"></i>';
-        
-        $('#volume-container').html(`
-            <div class="stat-value ${volumeStatus}">${volRatio.toFixed(1)}</div>
-            <div class="stat-label">量比</div>
-        `);
-        
-        // 渲染雷达图
-        renderRadarChart(rsi/10, (ma5 > ma20 ? 8 : 3), (macd > signal ? 8 : 3), (volRatio > 1 ? 8 : 3));
-    }
-    
-    // 计算并渲染支撑压力位
-    function calculateAndRenderSupportResistance(latestData) {
-        const currentPrice = parseFloat(latestData.close);
-        
-        // 布林带支撑压力
-        const upperBand = parseFloat(latestData.BB_upper || (currentPrice * 1.05));
-        const lowerBand = parseFloat(latestData.BB_lower || (currentPrice * 0.95));
-        
-        // 移动平均线支撑压力
-        const ma5 = parseFloat(latestData.MA5 || 0);
-        const ma20 = parseFloat(latestData.MA20 || 0);
-        const ma60 = parseFloat(latestData.MA60 || 0);
-        
-        // 计算支撑位
-        const supports = [];
-        const resistances = [];
-        
-        // 如果价格在均线上方，将均线作为支撑位
-        if (currentPrice > ma5) supports.push({level: ma5, type: 'MA5', distance: ((ma5 - currentPrice) / currentPrice * 100).toFixed(2)});
-        else resistances.push({level: ma5, type: 'MA5', distance: ((ma5 - currentPrice) / currentPrice * 100).toFixed(2)});
-        
-        if (currentPrice > ma20) supports.push({level: ma20, type: 'MA20', distance: ((ma20 - currentPrice) / currentPrice * 100).toFixed(2)});
-        else resistances.push({level: ma20, type: 'MA20', distance: ((ma20 - currentPrice) / currentPrice * 100).toFixed(2)});
-        
-        if (currentPrice > ma60) supports.push({level: ma60, type: 'MA60', distance: ((ma60 - currentPrice) / currentPrice * 100).toFixed(2)});
-        else resistances.push({level: ma60, type: 'MA60', distance: ((ma60 - currentPrice) / currentPrice * 100).toFixed(2)});
-        
-        // 布林带支撑压力
-        supports.push({level: lowerBand, type: '布林下轨', distance: ((lowerBand - currentPrice) / currentPrice * 100).toFixed(2)});
-        resistances.push({level: upperBand, type: '布林上轨', distance: ((upperBand - currentPrice) / currentPrice * 100).toFixed(2)});
-        
-        // 添加整数关口
-        const integerSupport = Math.floor(currentPrice);
-        const integerResistance = Math.ceil(currentPrice);
-        
-        if (integerSupport < currentPrice) {
-            supports.push({level: integerSupport, type: '整数关口', distance: ((integerSupport - currentPrice) / currentPrice * 100).toFixed(2)});
-        }
-        
-        if (integerResistance > currentPrice) {
-            resistances.push({level: integerResistance, type: '整数关口', distance: ((integerResistance - currentPrice) / currentPrice * 100).toFixed(2)});
-        }
-        
-        // 按距离排序
-        supports.sort((a, b) => parseFloat(b.distance) - parseFloat(a.distance));
-        resistances.sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
-        
-        // 渲染表格
-        let tableHtml = `
-            <table class="table table-sm support-resistance-table">
-                <thead>
-                    <tr>
-                        <th>类型</th>
-                        <th>价格</th>
-                        <th>距离</th>
-                    </tr>
-                </thead>
-                <tbody>
         `;
-        
-        // 添加压力位
-        resistances.slice(0, 3).forEach(r => {
-            tableHtml += `
-                <tr>
-                    <td><span class="badge bg-danger">压力</span> ${r.type}</td>
-                    <td>${r.level.toFixed(2)}</td>
-                    <td>+${Math.abs(r.distance)}%</td>
-                </tr>
-            `;
-        });
-        
-        // 添加当前价格
-        tableHtml += `
-            <tr class="table-info">
-                <td><span class="badge bg-primary">当前</span></td>
-                <td>${currentPrice.toFixed(2)}</td>
-                <td>-</td>
-            </tr>
-        `;
-        
-        // 添加支撑位
-        supports.slice(0, 3).forEach(s => {
-            tableHtml += `
-                <tr>
-                    <td><span class="badge bg-success">支撑</span> ${s.type}</td>
-                    <td>${s.level.toFixed(2)}</td>
-                    <td>${s.distance}%</td>
-                </tr>
-            `;
-        });
-        
-        tableHtml += `
-                </tbody>
-            </table>
-        `;
-        
-        $('#support-resistance-container').html(tableHtml);
     }
-    
-    // 渲染评分图表
-    function renderScoreChart(score) {
-        const options = {
-            series: [score],
-            chart: {
-                height: 180,
-                type: 'radialBar',
-                toolbar: {
-                    show: false
-                }
-            },
-            plotOptions: {
-                radialBar: {
-                    startAngle: -135,
-                    endAngle: 135,
-                    hollow: {
-                        margin: 0,
-                        size: '70%',
-                    },
-                    dataLabels: {
-                        show: false
-                    },
-                    track: {
-                        background: '#f2f2f2',
-                        strokeWidth: '97%',
-                        margin: 5,
-                        dropShadow: {
-                            enabled: false
-                        }
-                    }
-                }
-            },
-            fill: {
-                type: 'gradient',
-                gradient: {
-                    shade: 'dark',
-                    type: 'horizontal',
-                    shadeIntensity: 0.5,
-                    gradientToColors: [getScoreGradientColor(score)],
-                    inverseColors: true,
-                    opacityFrom: 1,
-                    opacityTo: 1,
-                    stops: [0, 100]
-                }
-            },
-            stroke: {
-                lineCap: 'round'
-            },
-            colors: [getScoreColor(score)]
-        };
 
-        const chart = new ApexCharts(document.querySelector("#score-chart"), options);
-        chart.render();
-    }
-    
-    // 渲染雷达图
-    function renderRadarChart(rsiScore, trendScore, macdScore, volumeScore) {
-        $('#radar-chart-container').html('<div id="radar-chart" style="height: 200px;"></div>');
-        
-        const options = {
-            series: [{
-                name: '评分',
-                data: [rsiScore, trendScore, macdScore, volumeScore]
-            }],
-            chart: {
-                height: 200,
-                type: 'radar',
-                toolbar: {
-                    show: false
-                },
-                dropShadow: {
-                    enabled: true,
-                    blur: 1,
-                    left: 1,
-                    top: 1
-                }
-            },
-            stroke: {
-                width: 2
-            },
-            fill: {
-                opacity: 0.2
-            },
-            markers: {
-                size: 3
-            },
-            xaxis: {
-                categories: ['RSI', '趋势', 'MACD', '成交量']
-            },
-            yaxis: {
-                show: false,
-                min: 0,
-                max: 10
-            },
-            plotOptions: {
-                radar: {
-                    polygons: {
-                        strokeColors: '#e9e9e9',
-                        fill: {
-                            colors: ['#f8f8f8', '#fff']
-                        }
-                    }
-                }
-            }
-        };
+    function renderReport(container, reportData) {
+        if (!reportData || !reportData.basic_info) {
+            container.innerHTML = `<div class="alert alert-warning">报告数据格式不正确或为空。</div>`;
+            return;
+        }
 
-        const chart = new ApexCharts(document.querySelector("#radar-chart"), options);
-        chart.render();
-    }
-    
-    // 渲染价格图表
-    function renderPriceChart() {
-        $('#price-chart').empty();
-        
-        try {
-            // 准备数据
-            const closePrices = stockData.map(item => ({
-                x: new Date(item.date),
-                y: parseFloat(item.close || 0)
-            }));
-            
-            const ma5Data = stockData.map(item => ({
-                x: new Date(item.date),
-                y: parseFloat(item.MA5 || null)
-            }));
-            
-            const ma20Data = stockData.map(item => ({
-                x: new Date(item.date),
-                y: parseFloat(item.MA20 || null)
-            }));
-            
-            const ma60Data = stockData.map(item => ({
-                x: new Date(item.date),
-                y: parseFloat(item.MA60 || null)
-            }));
-            
-            // 创建图表配置
-            const options = {
-                series: [
-                    {
-                        name: '价格',
-                        type: 'line',
-                        data: closePrices
-                    },
-                    {
-                        name: 'MA5',
-                        type: 'line',
-                        data: ma5Data
-                    },
-                    {
-                        name: 'MA20',
-                        type: 'line',
-                        data: ma20Data
-                    },
-                    {
-                        name: 'MA60',
-                        type: 'line',
-                        data: ma60Data
-                    }
-                ],
-                chart: {
-                    height: 400,
-                    type: 'line',
-                    animations: {
-                        enabled: false
-                    },
-                    toolbar: {
-                        show: true,
-                        tools: {
-                            download: true,
-                            selection: true,
-                            zoom: true,
-                            zoomin: true,
-                            zoomout: true,
-                            pan: true,
-                            reset: true
-                        }
-                    }
-                },
-                stroke: {
-                    width: [3, 2, 2, 2],
-                    curve: 'smooth',
-                    dashArray: [0, 0, 0, 0]
-                },
-                colors: ['#4e73df', '#36b9cc', '#1cc88a', '#f6c23e'],
-                fill: {
-                    type: 'solid',
-                    opacity: [1, 0.8, 0.8, 0.8],
-                },
-                markers: {
-                    size: 0
-                },
-                xaxis: {
-                    type: 'datetime',
-                    labels: {
-                        formatter: function (value) {
-                            return new Date(value).toLocaleDateString();
-                        }
-                    }
-                },
-                yaxis: {
-                    labels: {
-                        formatter: function (value) {
-                            return value.toFixed(2);
-                        }
-                    }
-                },
-                tooltip: {
-                    shared: true,
-                    intersect: false,
-                    y: {
-                        formatter: function (value) {
-                            return value ? value.toFixed(2) : '-';
-                        }
-                    },
-                    x: {
-                        format: 'yyyy-MM-dd'
-                    }
-                },
-                legend: {
-                    position: 'top',
-                    horizontalAlign: 'center'
-                },
-                grid: {
-                    borderColor: '#e0e0e0',
-                    strokeDashArray: 5,
-                    xaxis: {
-                        lines: {
-                            show: false
-                        }
-                    },
-                    yaxis: {
-                        lines: {
-                            show: true
-                        }
-                    }
-                }
-            };
+        const tech = reportData.technical_analysis;
+        const price = reportData.price_data;
+        const scores = reportData.scores;
 
-            const chart = new ApexCharts(document.querySelector("#price-chart"), options);
-            chart.render();
-        } catch (error) {
-            console.error("渲染价格图表时出错:", error);
-            $('#price-chart').html('<div class="alert alert-danger">价格图表渲染失败</div>');
-        }
-    }
-    
-    // 渲染技术指标图表
-    function renderIndicatorsChart() {
-        $('#indicators-chart').empty();
-        
-        try {
-            // 准备数据
-            const macdData = stockData.map(item => ({
-                x: new Date(item.date),
-                y: parseFloat(item.MACD || 0)
-            }));
-            
-            const signalData = stockData.map(item => ({
-                x: new Date(item.date),
-                y: parseFloat(item.Signal || 0)
-            }));
-            
-            const histogramData = stockData.map(item => ({
-                x: new Date(item.date),
-                y: parseFloat(item.MACD_hist || 0)
-            }));
-            
-            const rsiData = stockData.map(item => ({
-                x: new Date(item.date),
-                y: parseFloat(item.RSI || 0)
-            }));
-            
-            // 创建图表配置
-            const options = {
-                series: [
-                    {
-                        name: 'MACD',
-                        type: 'line',
-                        data: macdData
-                    },
-                    {
-                        name: 'Signal',
-                        type: 'line',
-                        data: signalData
-                    },
-                    {
-                        name: 'Histogram',
-                        type: 'bar',
-                        data: histogramData
-                    },
-                    {
-                        name: 'RSI',
-                        type: 'line',
-                        data: rsiData
-                    }
-                ],
-                chart: {
-                    height: 400,
-                    type: 'line',
-                    animations: {
-                        enabled: false
-                    },
-                    toolbar: {
-                        show: true
-                    }
-                },
-                stroke: {
-                    width: [3, 3, 0, 3],
-                    curve: 'smooth'
-                },
-                colors: ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e'],
-                plotOptions: {
-                    bar: {
-                        columnWidth: '80%'
-                    }
-                },
-                fill: {
-                    opacity: [1, 1, 0.8, 1]
-                },
-                markers: {
-                    size: 0
-                },
-                xaxis: {
-                    type: 'datetime',
-                    labels: {
-                        formatter: function (value) {
-                            return new Date(value).toLocaleDateString();
-                        }
-                    }
-                },
-                yaxis: [
-                    {
-                        title: {
-                            text: 'MACD'
-                        },
-                        labels: {
-                            formatter: function (value) {
-                                return value.toFixed(3);
-                            }
-                        }
-                    },
-                    {
-                        show: false,
-                        seriesName: 'Signal'
-                    },
-                    {
-                        show: false,
-                        seriesName: 'Histogram'
-                    },
-                    {
-                        opposite: true,
-                        title: {
-                            text: 'RSI'
-                        },
-                        min: 0,
-                        max: 100,
-                        seriesName: 'RSI',
-                        labels: {
-                            formatter: function (value) {
-                                return value.toFixed(1);
-                            }
-                        }
-                    }
-                ],
-                tooltip: {
-                    shared: true,
-                    intersect: false,
-                    y: {
-                        formatter: function (value, { seriesIndex }) {
-                            if (seriesIndex === 0 || seriesIndex === 1 || seriesIndex === 2) {
-                                return value.toFixed(3);
-                            }
-                            return value.toFixed(1);
-                        }
-                    },
-                    x: {
-                        format: 'yyyy-MM-dd'
-                    }
-                },
-                legend: {
-                    position: 'top',
-                    horizontalAlign: 'center'
-                }
-            };
+        let priceChangeClass = price.price_change > 0 ? 'text-success' : 'text-danger';
+        let priceChangeIcon = price.price_change > 0 ? 'fas fa-arrow-up' : 'fas fa-arrow-down';
 
-            const chart = new ApexCharts(document.querySelector("#indicators-chart"), options);
-            chart.render();
-        } catch (error) {
-            console.error("渲染指标图表时出错:", error);
-            $('#indicators-chart').html('<div class="alert alert-danger">指标图表渲染失败</div>');
-        }
-    }
-    
-    // 渲染成交量图表
-    function renderVolumeChart() {
-        $('#volume-chart').empty();
-        
-        try {
-            // 准备数据
-            const volumeData = stockData.map(item => ({
-                x: new Date(item.date),
-                y: parseFloat(item.volume || 0)
-            }));
-            
-            const volMaData = stockData.map(item => ({
-                x: new Date(item.date),
-                y: parseFloat(item.Volume_MA || 0)
-            }));
-            
-            // 创建图表配置
-            const options = {
-                series: [
-                    {
-                        name: '成交量',
-                        type: 'bar',
-                        data: volumeData
-                    },
-                    {
-                        name: '均量线',
-                        type: 'line',
-                        data: volMaData
-                    }
-                ],
-                chart: {
-                    height: 400,
-                    type: 'line',
-                    animations: {
-                        enabled: false
-                    },
-                    toolbar: {
-                        show: true
-                    }
-                },
-                stroke: {
-                    width: [0, 3],
-                    curve: 'smooth'
-                },
-                colors: ['#4e73df', '#1cc88a'],
-                fill: {
-                    opacity: [0.8, 1]
-                },
-                plotOptions: {
-                    bar: {
-                        columnWidth: '80%'
-                    }
-                },
-                markers: {
-                    size: 0
-                },
-                xaxis: {
-                    type: 'datetime',
-                    labels: {
-                        formatter: function (value) {
-                            return new Date(value).toLocaleDateString();
-                        }
-                    }
-                },
-                yaxis: {
-                    labels: {
-                        formatter: function (value) {
-                            if (value >= 1000000) {
-                                return (value / 1000000).toFixed(1) + 'M';
-                            } else if (value >= 1000) {
-                                return (value / 1000).toFixed(1) + 'K';
-                            }
-                            return value;
-                        }
-                    }
-                },
-                tooltip: {
-                    shared: true,
-                    intersect: false,
-                    y: {
-                        formatter: function (value, { seriesIndex }) {
-                            if (value >= 1000000) {
-                                return (value / 1000000).toFixed(2) + ' 百万';
-                            } else if (value >= 1000) {
-                                return (value / 1000).toFixed(2) + ' 千';
-                            }
-                            return value;
-                        }
-                    },
-                    x: {
-                        format: 'yyyy-MM-dd'
-                    }
-                },
-                legend: {
-                    position: 'top',
-                    horizontalAlign: 'center'
-                }
-            };
-
-            const chart = new ApexCharts(document.querySelector("#volume-chart"), options);
-            chart.render();
-        } catch (error) {
-            console.error("渲染成交量图表时出错:", error);
-            $('#volume-chart').html('<div class="alert alert-danger">成交量图表渲染失败</div>');
-        }
-    }
-    
-    // 启动AI分析
-    function startAIAnalysis() {
-        resetAIAnalysisUI();
-        
-        // 启动处理时间计时器
-        processingTime = 0;
-        processingTimer = setInterval(function() {
-            processingTime++;
-            $('#ai-processing-time').text(processingTime);
-            
-            // 更新进度条 - 创建一个假的进度
-            const progressPercent = Math.min(95, processingTime / 2);
-            $('#ai-progress-bar').css('width', progressPercent + '%');
-        }, 1000);
-        
-        // 启动AI分析任务
-        $.ajax({
-            url: '/api/start_stock_analysis',
-            type: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify({
-                stock_code: stockCode,
-                market_type: marketType
-            }),
-            success: function(response) {
-                // 检查是否已有结果
-                if (response.status === 'completed' && response.result) {
-                    // 任务已完成，直接处理结果
-                    handleAIAnalysisResult(response.result);
-                    return;
-                }
-                
-                // 开始轮询任务状态
-                pollAIAnalysisStatus(response.task_id);
-            },
-            error: function(xhr, status, error) {
-                handleAIAnalysisError(xhr, status, error);
-            }
-        });
-    }
-    
-    // 轮询AI分析状态
-    function pollAIAnalysisStatus(taskId) {
-        // 保存当前任务ID，用于取消
-        window.currentAnalysisTaskId = taskId;
-        
-        function checkStatus() {
-            $.ajax({
-                url: `/api/analysis_status/${taskId}`,
-                type: 'GET',
-                success: function(response) {
-                    // 根据任务状态处理
-                    if (response.status === 'completed') {
-                        // 分析完成，停止轮询和计时器
-                        clearInterval(window.analysisStatusInterval);
-                        
-                        // 处理结果
-                        handleAIAnalysisResult(response.result);
-                    } else if (response.status === 'failed') {
-                        // 分析失败，停止轮询
-                        clearInterval(window.analysisStatusInterval);
-                        
-                        handleAIAnalysisError(null, 'failed', response.error || '未知错误');
-                    } else {
-                        // 更新进度
-                        const progress = response.progress || 0;
-                        $('#ai-progress-bar').css('width', progress + '%');
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.log("轮询状态出错:", error);
-                    // 错误时仍继续轮询
-                }
-            });
-        }
-        
-        // 立即执行一次
-        checkStatus();
-        
-        // 设置轮询间隔
-        window.analysisStatusInterval = setInterval(checkStatus, 2000);
-    }
-    
-    // 处理AI分析结果
-    function handleAIAnalysisResult(result) {
-        // 停止计时器
-        if (processingTimer) {
-            clearInterval(processingTimer);
-            processingTimer = null;
-        }
-        
-        // 更新AI分析状态
-        $('#ai-analysis-status').text('分析完成').removeClass('bg-info bg-danger').addClass('bg-success');
-        
-        // 渲染AI分析内容
-        const aiAnalysis = result.ai_analysis || '无法获取AI分析结果';
-        $('#ai-analysis').html(formatAIAnalysis(aiAnalysis));
-        
-        // 隐藏加载动画，显示内容
-        $('#ai-analysis-loader').fadeOut(300, function() {
-            $('#ai-analysis-content').css('opacity', '1');
-        });
-
-        // 从AI分析结果中更新股票信息
-        if (result.basic_info) {
-            const stockName = result.basic_info.stock_name || $('#stock-title').text().split(' ')[0];
-            const industry = result.basic_info.industry || $('#stock-info').text().split(' | ')[0];
-            
-            $('#stock-title').html(`${stockName} <span class="text-muted">${stockCode}</span>`);
-            $('#stock-info').text(`${industry} | 数据日期: ${$('#stock-info').text().split(' | ')[1]}`);
-            $('#ai-analysis-stock-name').text(stockName);
-        }
-}
-    
-    // 处理AI分析错误
-    function handleAIAnalysisError(xhr, status, error) {
-        // 停止计时器
-        if (processingTimer) {
-            clearInterval(processingTimer);
-            processingTimer = null;
-        }
-        
-        // 更新AI分析状态
-        $('#ai-analysis-status').text('分析失败').removeClass('bg-info bg-success').addClass('bg-danger');
-        
-        // 构建错误消息
-        let errorMsg = '分析过程中出错';
-        if (status === 'timeout') {
-            errorMsg = '请求超时，分析可能需要较长时间';
-        } else if (xhr && xhr.status === 524 || xhr && xhr.status === 504) {
-            errorMsg = '请求超时，服务器处理时间过长';
-        } else if (xhr && xhr.responseJSON && xhr.responseJSON.error) {
-            errorMsg += ': ' + xhr.responseJSON.error;
-        } else if (error) {
-            errorMsg += ': ' + error;
-        }
-        
-        // 显示错误重试区域
-        $('#error-retry').show();
-        
-        // 隐藏加载动画
-        $('#ai-analysis-loader').hide();
-    }
-    
-    // 取消AI分析
-    function cancelAnalysis() {
-        if (window.currentAnalysisTaskId) {
-            $.ajax({
-                url: `/api/cancel_analysis/${window.currentAnalysisTaskId}`,
-                type: 'POST',
-                success: function(response) {
-                    // 停止计时器
-                    if (processingTimer) {
-                        clearInterval(processingTimer);
-                        processingTimer = null;
-                    }
-                    
-                    // 停止轮询
-                    if (window.analysisStatusInterval) {
-                        clearInterval(window.analysisStatusInterval);
-                    }
-                    
-                    // 更新UI
-                    $('#ai-analysis-status').text('已取消').removeClass('bg-info bg-success').addClass('bg-warning');
-                    $('#ai-analysis-loader').hide();
-                    $('#ai-analysis').html('<div class="alert alert-warning">AI分析已取消，您可以点击"重试分析"按钮重新开始分析。</div>');
-                    $('#ai-analysis-content').css('opacity', '1');
-                    $('#error-retry').show();
-                },
-                error: function(error) {
-                    console.error('取消分析失败:', error);
-                }
-            });
-        }
-    }
-    
-    // 重置AI分析UI
-    function resetAIAnalysisUI() {
-        // 停止现有计时器和轮询
-        if (processingTimer) {
-            clearInterval(processingTimer);
-            processingTimer = null;
-        }
-        
-        if (window.analysisStatusInterval) {
-            clearInterval(window.analysisStatusInterval);
-        }
-        
-        // 重置处理时间
-        processingTime = 0;
-        $('#ai-processing-time').text('0');
-        
-        // 重置进度条
-        $('#ai-progress-bar').css('width', '0%');
-        
-        // 更新状态显示
-        $('#ai-analysis-status').text('正在分析...').removeClass('bg-success bg-danger bg-warning').addClass('bg-info');
-        
-        // 显示加载动画，隐藏内容
-        $('#ai-analysis-loader').show();
-        $('#ai-analysis-content').css('opacity', '0');
-        
-        // 隐藏错误重试区域
-        $('#error-retry').hide();
-    }
-    
-    // 格式化AI分析
-    function formatAIAnalysis(text) {
-    if (!text) return '';
-
-    // 对文本进行HTML转义，确保安全
-    const safeText = text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-
-    // 替换 Markdown 元素
-    let formatted = safeText
-        // 标题 - 增加对####和#####的支持
-        .replace(/^# (.*?)$/gm, '<h4 class="mt-3 mb-2">$1</h4>')
-        .replace(/^## (.*?)$/gm, '<h5 class="mt-2 mb-2">$1</h5>')
-        .replace(/^### (.*?)$/gm, '<h6 class="mt-2 mb-1">$1</h6>')
-        .replace(/^#### (.*?)$/gm, '<h6 class="mt-2 mb-1">$1</h6>')
-        .replace(/^##### (.*?)$/gm, '<div class="section-header bg-light p-2 rounded mb-2"><strong>$1</strong></div>')
-        .replace(/^###### (.*?)$/gm, '<div class="subsection-header p-1 border-bottom mb-2"><strong>$1</strong></div>')
-        
-        // 加粗和斜体
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/__(.*?)__/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/_(.*?)_/g, '<em>$1</em>')
-        
-        // 颜色标记
-        .replace(/\[\[上涨\]\]/g, '<span class="trend-up"><i class="fas fa-arrow-up"></i> 上涨</span>')
-        .replace(/\[\[下跌\]\]/g, '<span class="trend-down"><i class="fas fa-arrow-down"></i> 下跌</span>')
-        
-        // 应用特殊样式到金融术语
-        .replace(/支撑位/g, '<span class="keyword">支撑位</span>')
-        .replace(/压力位/g, '<span class="keyword">压力位</span>')
-        .replace(/趋势/g, '<span class="keyword">趋势</span>')
-        .replace(/均线/g, '<span class="keyword">均线</span>')
-        .replace(/MACD/g, '<span class="term">MACD</span>')
-        .replace(/RSI/g, '<span class="term">RSI</span>')
-        .replace(/KDJ/g, '<span class="term">KDJ</span>')
-        
-        // 突出显示价格模式和变动
-        .replace(/\b(上涨|升|涨)\b/g, '<span class="trend-up">$1</span>')
-        .replace(/\b(下跌|降|跌)\b/g, '<span class="trend-down">$1</span>')
-        .replace(/\b(买入|做多|多头|突破)\b/g, '<span class="trend-up">$1</span>')
-        .replace(/\b(卖出|做空|空头|跌破)\b/g, '<span class="trend-down">$1</span>')
-        
-        // 突出显示价格数值 (匹配如 31.25, 120.50)
-        .replace(/(\d+\.\d{2})/g, '<span class="price">$1</span>')
-        
-        // 将多个换行转换为段落
-        .replace(/\n\n+/g, '</p><p class="analysis-para">')
-        .replace(/\n/g, '<br>');
-
-    // 包装在段落标签中以保持一致的样式
-    return '<p class="analysis-para">' + formatted + '</p>';
-}
-    
-    // 辅助函数：获取评分颜色类
-    function getScoreColorClass(score) {
-        if (score >= 80) return 'bg-success';
-        if (score >= 60) return 'bg-primary';
-        if (score >= 40) return 'bg-warning text-dark';
-        return 'bg-danger';
-    }
-    
-    // 辅助函数：获取评分颜色
-    function getScoreColor(score) {
-        if (score >= 80) return '#28a745';
-        if (score >= 60) return '#4e73df';
-        if (score >= 40) return '#f6c23e';
-        return '#e74a3b';
-    }
-    
-    // 辅助函数：获取评分梯度颜色
-    function getScoreGradientColor(score) {
-        if (score >= 80) return '#1cc88a';
-        if (score >= 60) return '#36b9cc';
-        if (score >= 40) return '#f6c23e';
-        return '#e74a3b';
-    }
-    
-    // 辅助函数：获取评分描述
-    function getScoreDescription(score) {
-        if (score >= 90) return '强烈推荐';
-        if (score >= 80) return '推荐';
-        if (score >= 70) return '持续关注';
-        if (score >= 60) return '关注';
-        if (score >= 50) return '观望';
-        if (score >= 40) return '中性';
-        if (score >= 30) return '减持';
-        return '卖出';
-    }
-    
-    // 显示错误提示
-    function showError(message) {
-        const alertHtml = `
-            <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                <i class="fas fa-exclamation-triangle me-2"></i>${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        const html = `
+            <div class="card">
+                <div class="card-header">
+                    <h5>分析报告: ${reportData.basic_info.analysis_date}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h4>${price.current_price.toFixed(2)} <small class="${priceChangeClass}"><i class="${priceChangeIcon}"></i> ${price.price_change.toFixed(2)}%</small></h4>
+                            <p class="text-muted">投资建议: <strong>${reportData.recommendation.action}</strong></p>
+                            <hr>
+                            <div class="ai-analysis-content">
+                                ${reportData.ai_analysis.replace(/\n/g, '<br>')}
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <h5>技术评分: ${scores.total}/40</h5>
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item d-flex justify-content-between">趋势: <span>${scores.trend}/10</span></li>
+                                <li class="list-group-item d-flex justify-content-between">指标: <span>${scores.indicators}/10</span></li>
+                                <li class="list-group-item d-flex justify-content-between">支撑/阻力: <span>${scores.support_resistance}/10</span></li>
+                                <li class="list-group-item d-flex justify-content-between">波动/成交量: <span>${scores.volatility_volume}/10</span></li>
+                            </ul>
+                            <h5 class="mt-3">关键指标</h5>
+                             <ul class="list-group list-group-flush">
+                                <li class="list-group-item d-flex justify-content-between">RSI: <span>${tech.indicators.rsi.toFixed(2)}</span></li>
+                                <li class="list-group-item d-flex justify-content-between">波动率: <span>${tech.indicators.volatility.toFixed(2)}%</span></li>
+                                <li class="list-group-item d-flex justify-content-between">成交量比: <span>${tech.volume.volume_ratio.toFixed(2)}</span></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
-        $('#alerts-container').html(alertHtml);
+        container.innerHTML = html;
     }
     
-    // 显示信息提示
-    function showInfo(message) {
-        const alertHtml = `
-            <div class="alert alert-info alert-dismissible fade show" role="alert">
-                <i class="fas fa-info-circle me-2"></i>${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-        `;
-        $('#alerts-container').html(alertHtml);
+    async function saveNote() {
+        const content = noteInput.value.trim();
+        if (!content) {
+            showAlert('备注内容不能为空。', 'warning');
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/save_note', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    stock_code: stockCode,
+                    market_type: marketType,
+                    content: content
+                })
+            });
+            if (!response.ok) throw new Error('Failed to save note.');
+            
+            noteInput.value = '';
+            showAlert('备注已保存！', 'success');
+            fetchNotes(); // Refresh notes list
+        } catch (error) {
+            console.error('Error saving note:', error);
+            showAlert('保存备注失败。', 'danger');
+        }
     }
+    
+    async function fetchNotes() {
+        try {
+            const response = await fetch(`/api/get_notes?stock_code=${stockCode}&market_type=${marketType}`);
+            if (!response.ok) throw new Error('Failed to fetch notes.');
+            const notes = await response.json();
+            
+            if (notes.length > 0) {
+                notesHistory.innerHTML = notes.map(note => `
+                    <div class="card bg-light mb-2">
+                        <div class="card-body p-2">
+                            <p class="card-text small">${note.content.replace(/\n/g, '<br>')}</p>
+                            <p class="card-text text-end"><small class="text-muted">${note.note_date}</small></p>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                notesHistory.innerHTML = '<p class="text-muted text-center">暂无历史备注。</p>';
+            }
+        } catch(error) {
+            console.error('Error fetching notes:', error);
+            notesHistory.innerHTML = '<p class="text-danger text-center">无法加载备注。</p>';
+        }
+    }
+    
+    async function fetchAndRenderChart() {
+        try {
+            const response = await fetch(`/api/stock_data?stock_code=${stockCode}&market_type=${marketType}&period=1y`);
+            if (!response.ok) throw new Error('Failed to fetch chart data.');
+            const result = await response.json();
+            const data = result.data;
+
+            const dates = data.map(item => item.date);
+            const klineData = data.map(item => [item.open, item.close, item.low, item.high]);
+            const volumes = data.map((item, index) => [index, item.volume, item.close > item.open ? 1 : -1]);
+            
+            const option = {
+                xAxis: [
+                    { data: dates },
+                    { data: dates, gridIndex: 1, show: false }
+                ],
+                yAxis: [
+                    { scale: true },
+                    { scale: true, gridIndex: 1, splitNumber: 2, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } }
+                ],
+                grid: [
+                    { left: '10%', right: '8%', height: '50%' },
+                    { left: '10%', right: '8%', top: '63%', height: '16%' }
+                ],
+                series: [
+                    {
+                        type: 'candlestick',
+                        data: klineData,
+                        itemStyle: {
+                            color: '#28a745', color0: '#dc3545',
+                            borderColor: '#28a745', borderColor0: '#dc3545'
+                        }
+                    },
+                    {
+                        type: 'bar',
+                        xAxisIndex: 1,
+                        yAxisIndex: 1,
+                        data: volumes,
+                        itemStyle: {
+                            color: ({ value }) => (value[2] === 1 ? '#28a745' : '#dc3545')
+                        }
+                    }
+                ]
+            };
+            kLineChart.setOption(option);
+
+        } catch (error) {
+            console.error('Error fetching chart data:', error);
+            kLineChartDom.innerHTML = `<div class="alert alert-danger">无法加载K线图数据。</div>`;
+        }
+    }
+
+
+    // --- Event Listeners ---
+    refreshBtn.addEventListener('click', requestAnalysis);
+    
+    compareBtn.addEventListener('click', () => {
+        const isPressed = compareBtn.classList.contains('active');
+        reportSelector2.disabled = !isPressed;
+        if (isPressed) {
+            reportContainer1.className = 'col-lg-6';
+            reportContainer2.style.display = 'block';
+            reportContainer2.innerHTML = getReportPlaceholder();
+            // Load the selected report for comparison
+            const reportId = reportSelector2.value;
+            if(reportId) handleReportSelection(reportContainer2, reportId);
+
+        } else {
+            reportContainer1.className = 'col-lg-12';
+            reportContainer2.style.display = 'none';
+        }
+    });
+
+    async function handleReportSelection(container, reportId) {
+        try {
+            const response = await fetch(`/api/get_historical_reports?stock_code=${stockCode}&market_type=${marketType}`);
+            if (!response.ok) throw new Error('Failed to fetch historical reports.');
+            const reports = await response.json();
+            const selectedReport = reports.find(r => r.id == reportId);
+            if (selectedReport) {
+                renderReport(container, selectedReport.report_content);
+            }
+        } catch(error) {
+            console.error('Error fetching selected report:', error);
+            container.innerHTML = `<div class="alert alert-danger">无法加载所选报告。</div>`;
+        }
+    }
+
+    reportSelector1.addEventListener('change', (e) => handleReportSelection(reportContainer1, e.target.value));
+    reportSelector2.addEventListener('change', (e) => {
+        if (compareBtn.classList.contains('active')) {
+            handleReportSelection(reportContainer2, e.target.value);
+        }
+    });
+    
+    saveNoteBtn.addEventListener('click', saveNote);
+
+    // --- Initial Load ---
+    fetchHistoricalReports();
+    fetchNotes();
+    fetchAndRenderChart();
+});
 </script>
 {% endblock %}

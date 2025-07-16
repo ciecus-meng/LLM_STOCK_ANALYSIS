@@ -51,7 +51,7 @@ class NewsFetcher:
                 filename = self.get_news_filename(date)
 
                 if os.path.exists(filename):
-                    with open(filename, 'r', encoding='utf-8') as f:
+                    with open(filename, 'r', encoding='utf-8', errors='ignore') as f:
                         try:
                             news_data = json.load(f)
                             for item in news_data:
@@ -161,7 +161,7 @@ class NewsFetcher:
 
             # 如果文件已存在，则合并新旧数据
             if os.path.exists(filename):
-                with open(filename, 'r', encoding='utf-8') as f:
+                with open(filename, 'r', encoding='utf-8', errors='ignore') as f:
                     try:
                         existing_data = json.load(f)
                         # 合并数据，已经确保news_list中的内容都是新的
@@ -204,7 +204,7 @@ class NewsFetcher:
 
             if os.path.exists(filename):
                 try:
-                    with open(filename, 'r', encoding='utf-8') as f:
+                    with open(filename, 'r', encoding='utf-8', errors='ignore') as f:
                         data = json.load(f)
                         news_data.extend(data)
                         processed_dates.append(date_str)

@@ -14,6 +14,7 @@ import logging
 import math
 import json
 import threading
+import akshare as ak
 
 # 线程局部存储
 thread_local = threading.local()
@@ -1644,94 +1645,118 @@ class StockAnalyzer:
     def get_stock_info(self, stock_code, market_type='A'):
         """获取单个股票的基本信息，如名称、行业等"""
         cache_key = f"info_{stock_code}_{market_type}"
-        if cache_key in self.data_cache:
-            return self.data_cache[cache_key]
+        # if cache_key in self.data_cache:
+        #     return self.data_cache[cache_key]
 
         info_dict = {"股票名称": "未知", "行业": "未知", "地区": "未知"}
         try:
             import akshare as ak
-            # 使用 ak.stock_individual_info_em 获取更全面的信息
-            stock_info_df = ak.stock_individual_info_em(symbol=stock_code)
-            
-            if stock_info_df.empty:
-                self.logger.warning(f"无法获取股票 {stock_code} 的基本信息。")
-                return {"股票名称": stock_code, "行业": "未知"}
 
+            # First, get the name using the more reliable helper function
+            stock_name = self._get_stock_name(stock_code, market_type)
+            info_dict['股票名称'] = stock_name
+
+            # For A-shares, we can get more details like industry
+            if market_type == 'A':
+                stock_info_df = ak.stock_individual_info_em(symbol=stock_code)
+                self.logger.info(f"Fetched A-share info for {stock_code}:\n{stock_info_df}")
+                if not stock_info_df.empty:
+                    # Create a dictionary from the two columns 'item' and 'value'
+                    info_from_df = dict(zip(stock_info_df['item'], stock_info_df['value']))
+                    info_dict["行业"] = info_from_df.get("行业", "未知")
+                    info_dict["地区"] = info_from_df.get("地域", "未知")
             elif market_type == 'HK':
-                # 获取所有港股信息，然后筛选
-                all_hk_stocks = ak.stock_hk_spot_em()
-                stock_info = all_hk_stocks[all_hk_stocks['代码'] == stock_code]
-                if not stock_info.empty:
-                    stock_data = stock_info.iloc[0]
-                    info_dict = {
-                        "股票名称": stock_data.get("名称", "未知"),
-                        "行业": "未知", # 港股接口不直接提供行业信息
-                        "最新价": stock_data.get("最新价", 0),
-                        "涨跌额": stock_data.get("涨跌额", 0),
-                        "涨跌幅": stock_data.get("涨跌幅", 0),
-                    }
-
+                stock_info_df = ak.stock_hk_company_profile_em(symbol=stock_code.zfill(5))
+                self.logger.info(f"Fetched HK-share info for {stock_code}:\n{stock_info_df}")
+                if not stock_info_df.empty:
+                    # info_from_df = dict(zip(stock_info_df.iloc[:, 0], stock_info_df.iloc[:, 1]))
+                    info_dict["行业"] = stock_info_df['所属行业'].values[0]
+                    info_dict["地区"] = stock_info_df['办公地址'].values[0]
             elif market_type == 'US':
-                # 获取所有美股信息，然后筛选
-                all_us_stocks = ak.stock_us_spot_em()
-                stock_info = all_us_stocks[all_us_stocks['代码'] == stock_code]
-                if not stock_info.empty:
-                    stock_data = stock_info.iloc[0]
-                    info_dict = {
-                        "股票名称": stock_data.get("名称", "未知"),
-                        "行业": "未知", # 美股接口不直接提供行业信息
-                        "最新价": stock_data.get("最新价", 0),
-                        "涨跌额": stock_data.get("涨跌额", 0),
-                        "涨跌幅": stock_data.get("涨跌幅", 0),
-                    }
+                stock_info_df = ak.stock_individual_basic_info_us_xq(symbol=stock_code)
+                self.logger.info(f"Fetched US-share info for {stock_code}:\n{stock_info_df}")
+                if not stock_info_df.empty:
+                    # The DataFrame has two columns (e.g., 'item', 'value'). Convert to a dictionary.
+                    info_from_df = dict(zip(stock_info_df.iloc[:, 0], stock_info_df.iloc[:, 1]))
+                    info_dict["行业"] = info_from_df.get("main_operation_business", "未知")
+                    info_dict["地区"] = info_from_df.get("reg_address_cn", "未知")
             
-            # 统一获取和设置股票名称，提高准确性
-            if info_dict.get("股票名称", "未知") == "未知":
-                name = self._get_stock_name(stock_code, market_type)
-                if name != "未知":
-                    info_dict['股票名称'] = name
-
-
             self.data_cache[cache_key] = info_dict
             return info_dict
         except Exception as e:
             self.logger.error(f"获取股票 {stock_code} ({market_type}) 信息失败: {str(e)}")
-            # 即使失败，也尝试获取名称
+            # Even on error, try to get the name as a fallback
             name = self._get_stock_name(stock_code, market_type)
-            info_dict['股票名称'] = name
+            if name != "未知":
+                info_dict['股票名称'] = name
             self.data_cache[cache_key] = info_dict
             return info_dict
 
     def _get_stock_name(self, stock_code, market_type='A'):
-        """一个辅助函数，专门用于获取股票名称，增加代码复用性"""
-        import akshare as ak
+        """
+        An auxiliary function to get the stock name, using a database-first approach.
+        """
+        # 1. Try to get from the database first
+        from database import get_session, StockInfo
+        db_session = get_session()
+        try:
+            stock_info = db_session.query(StockInfo).filter_by(stock_code=stock_code, market_type=market_type).first()
+            if stock_info and stock_info.stock_name:
+                return stock_info.stock_name
+        finally:
+            db_session.close()
+
+        # 2. If not in DB, fallback to API
+        self.logger.warning(f"Stock {stock_code} ({market_type}) not found in local DB, falling back to API.")
+        try:
+            name_from_api = self._fetch_name_from_api(stock_code, market_type)
+            if name_from_api != "未知":
+                # 3. Save the newly fetched name to the database
+                self._save_stock_info_to_db(stock_code, name_from_api, market_type)
+                return name_from_api
+        except Exception as e:
+            self.logger.error(f"Failed to fetch name from API for {stock_code}: {e}")
+
+        return "未知"
+
+    def _fetch_name_from_api(self, stock_code, market_type='A'):
+        """The original API-calling logic for fetching a stock name."""
         try:
             if market_type == 'A':
-                stock_name_df = ak.stock_info_a_code_name()
-                # 兼容akshare接口变化，列名可能是code或symbol
-                code_col = 'code' if 'code' in stock_name_df.columns else 'symbol'
-                matched_stocks = stock_name_df[stock_name_df[code_col] == stock_code]
-                if not matched_stocks.empty:
-                    return matched_stocks['name'].values[0]
+                df = ak.stock_individual_info_em(symbol=stock_code) # 有行业
+                return df['股票简称'].values[0]
             elif market_type == 'HK':
-                 # 对于港股，代码通常是数字，需要补零到5位
-                stock_code_padded = stock_code.zfill(5)
-                stock_name_df = ak.stock_info_hk_name()
-                matched_stocks = stock_name_df[stock_name_df['code'] == stock_code_padded]
-                if not matched_stocks.empty:
-                    return matched_stocks['name'].values[0]
+                df = ak.stock_individual_basic_info_hk_xq(stock_code.zfill(5))
+                return df['comcnname'].values[0]
             elif market_type == 'US':
-                # 根据用户提示，使用 get_us_stock_name
-                us_stocks_df = ak.get_us_stock_name()
-                matched_stocks = us_stocks_df[us_stocks_df['symbol'] == stock_code]
-                if not matched_stocks.empty:
-                    # 返回英文名
-                    return matched_stocks['name'].values[0]
-
+                df = ak.stock_individual_basic_info_us_xq(stock_code)
+                return df['org_name_cn'].values[0]
         except Exception as e:
-            self.logger.warning(f"通过名称映射表获取 {stock_code} 名称失败: {e}")
-        
+            self.logger.warning(f"API call to get name for {stock_code} failed: {e}")
         return "未知"
+
+    def _save_stock_info_to_db(self, stock_code, stock_name, market_type):
+        """Saves a single stock's info to the database."""
+        from database import get_session, StockInfo
+        db_session = get_session()
+        try:
+            # Check if it already exists to avoid race conditions
+            existing = db_session.query(StockInfo).filter_by(stock_code=stock_code, market_type=market_type).first()
+            if not existing:
+                new_info = StockInfo(
+                    stock_code=stock_code,
+                    stock_name=stock_name,
+                    market_type=market_type,
+                    industry=None # Industry is not fetched in this fallback
+                )
+                db_session.add(new_info)
+                db_session.commit()
+                self.logger.info(f"Saved new stock to DB: {stock_code} ({stock_name})")
+        except Exception as e:
+            self.logger.error(f"Failed to save new stock {stock_code} to DB: {e}")
+            db_session.rollback()
+        finally:
+            db_session.close()
 
 
     def identify_support_resistance(self, df):
