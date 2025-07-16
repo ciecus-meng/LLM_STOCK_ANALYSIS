@@ -71,7 +71,7 @@ class FundamentalAnalyzer:
 
         return ((latest / earlier) ** (1 / years) - 1) * 100
 
-    def calculate_fundamental_score(self, stock_code):
+    def calculate_fundamental_score(self, stock_code,market_type='A'):
         """计算基本面综合评分"""
         indicators = self.get_financial_indicators(stock_code)
         growth = self.get_growth_data(stock_code)

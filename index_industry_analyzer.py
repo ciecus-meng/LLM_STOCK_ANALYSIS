@@ -142,7 +142,7 @@ class IndexIndustryAnalyzer:
                     return cached_result
 
             # 获取行业成分股
-            stocks = ak.stock_board_industry_cons_em(symbol=industry)
+            stocks = ak.stock_board_industry_cons_em(symbol=industry) # 东方财富-成份股
 
             # 提取股票代码列表
             stock_list = stocks['代码'].tolist() if '代码' in stocks.columns else []

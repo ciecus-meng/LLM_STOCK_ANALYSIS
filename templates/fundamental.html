@@ -161,19 +161,19 @@
                 return;
             }
 
-            fetchFundamentalAnalysis(stockCode);
+            fetchFundamentalAnalysis(stockCode, marketType);
         });
     });
 
-    function fetchFundamentalAnalysis(stockCode) {
+    function fetchFundamentalAnalysis(stockCode,marketType) {
         showLoading();
-
         $.ajax({
             url: '/api/fundamental_analysis',
             type: 'POST',
             contentType: 'application/json',
             data: JSON.stringify({
-                stock_code: stockCode
+                stock_code: stockCode,
+                market_type: marketType
             }),
             success: function(response) {
                 hideLoading();

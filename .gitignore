@@ -82,3 +82,5 @@ dump.rdb
 .env.development.local
 .env.test.local
 .env.production.local 
+# Process ID files
+*.pid

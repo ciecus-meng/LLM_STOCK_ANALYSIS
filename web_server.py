@@ -4,7 +4,7 @@
 
 import numpy as np
 import pandas as pd
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for, Response
 from stock_analyzer import StockAnalyzer
 from us_stock_service import USStockService
 import threading
@@ -20,7 +20,7 @@ from flask_caching import Cache
 import threading
 import sys
 from flask_swagger_ui import get_swaggerui_blueprint
-from database import get_session, StockInfo, AnalysisResult, Portfolio, USE_DATABASE, init_db
+from database import get_session, StockInfo, AnalysisResult, Portfolio, USE_DATABASE, init_db, AnalysisTask, AiAnalysisReport, UserStockNote
 from dotenv import load_dotenv
 from industry_analyzer import IndustryAnalyzer
 from fundamental_analyzer import FundamentalAnalyzer
@@ -31,13 +31,10 @@ from risk_monitor import RiskMonitor
 from index_industry_analyzer import IndexIndustryAnalyzer
 from news_fetcher import news_fetcher, start_news_scheduler
 import config
+import uuid
 
 # 加载环境变量
 load_dotenv()
-
-# 检查是否需要初始化数据库
-if USE_DATABASE:
-    init_db()
 
 # 配置Swagger
 SWAGGER_URL = '/api/docs'
@@ -100,6 +97,11 @@ start_news_scheduler()
 thread_local = threading.local()
 
 
+def generate_task_id():
+    """生成唯一的任务ID"""
+    return str(uuid.uuid4())
+
+
 def get_analyzer():
     """获取线程本地的分析器实例"""
     # 如果线程本地存储中没有分析器实例，创建一个新的
@@ -116,173 +118,195 @@ handler.setFormatter(logging.Formatter(
 ))
 app.logger.addHandler(handler)
 
-# 扩展任务管理系统以支持不同类型的任务
-task_types = {
-    'scan': 'market_scan',  # 市场扫描任务
-    'analysis': 'stock_analysis'  # 个股分析任务
-}
 
-# 任务数据存储
-tasks = {
-    'market_scan': {},  # 原来的scan_tasks
-    'stock_analysis': {}  # 新的个股分析任务
-}
+# =====================================================================
+#  New Asynchronous Analysis and Reporting Endpoints
+# =====================================================================
 
+@app.route('/api/request_analysis', methods=['POST'])
+def request_analysis():
+    """
+    Handles a request for a stock analysis.
+    Checks for a recent report, an existing task, or creates a new one.
+    """
+    data = request.get_json()
+    stock_code = data.get('stock_code')
+    market_type = data.get('market_type', 'A')
+    params = {'stock_code': stock_code, 'market_type': market_type}
 
-def get_task_store(task_type):
-    """获取指定类型的任务存储"""
-    return tasks.get(task_type, {})
+    if not stock_code:
+        return jsonify({'error': 'Stock code is required'}), 400
 
+    db_session = get_session()
+    try:
+        now = datetime.now()
+        
+        # 1. Check for a report generated in the current hour
+        latest_report = db_session.query(AiAnalysisReport).filter(
+            AiAnalysisReport.stock_code == stock_code,
+            AiAnalysisReport.market_type == market_type,
+            AiAnalysisReport.report_date == now.date(),
+            AiAnalysisReport.report_hour == now.hour
+        ).first()
 
-def generate_task_key(task_type, **params):
-    """生成任务键"""
-    if task_type == 'stock_analysis':
-        # 对于个股分析，使用股票代码和市场类型作为键
-        return f"{params.get('stock_code')}_{params.get('market_type', 'A')}"
-    return None  # 其他任务类型不使用预生成的键
+        if latest_report:
+            return jsonify({
+                'status': 'completed',
+                'report': latest_report.to_dict()
+            })
 
+        # 2. Check for an active task (pending or in_progress)
+        active_task = db_session.query(AnalysisTask).filter(
+            AnalysisTask.task_type == 'single_stock',
+            AnalysisTask.parameters['stock_code'].as_string() == stock_code,
+            AnalysisTask.parameters['market_type'].as_string() == market_type,
+            AnalysisTask.status.in_(['pending', 'in_progress'])
+        ).first()
 
-def get_or_create_task(task_type, **params):
-    """获取或创建任务"""
-    store = get_task_store(task_type)
-    task_key = generate_task_key(task_type, **params)
+        if active_task:
+            return jsonify({
+                'status': active_task.status,
+                'task_id': active_task.id
+            })
 
-    # 检查是否有现有任务
-    if task_key and task_key in store:
-        task = store[task_key]
-        # 检查任务是否仍然有效
-        if task['status'] in [TASK_PENDING, TASK_RUNNING]:
-            return task['id'], task, False
-        if task['status'] == TASK_COMPLETED and 'result' in task:
-            # 任务已完成且有结果，重用它
-            return task['id'], task, False
+        # 3. Create a new task
+        new_task = AnalysisTask(
+            id=generate_task_id(),
+            task_type='single_stock',
+            status='pending',
+            parameters=params
+        )
+        db_session.add(new_task)
+        db_session.commit()
 
-    # 创建新任务
-    task_id = generate_task_id()
-    task = {
-        'id': task_id,
-        'key': task_key,  # 存储任务键以便以后查找
-        'type': task_type,
-        'status': TASK_PENDING,
-        'progress': 0,
-        'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'params': params
-    }
+        return jsonify({
+            'status': 'pending',
+            'task_id': new_task.id
+        }), 202  # 202 Accepted
 
-    with task_lock:
-        if task_key:
-            store[task_key] = task
-        store[task_id] = task
-
-    return task_id, task, True
-
-
-# 添加到web_server.py顶部
-# 任务管理系统
-scan_tasks = {}  # 存储扫描任务的状态和结果
-task_lock = threading.Lock()  # 用于线程安全操作
-
-# 任务状态常量
-TASK_PENDING = 'pending'
-TASK_RUNNING = 'running'
-TASK_COMPLETED = 'completed'
-TASK_FAILED = 'failed'
-
-
-def generate_task_id():
-    """生成唯一的任务ID"""
-    import uuid
-    return str(uuid.uuid4())
+    except Exception as e:
+        app.logger.error(f"Error in request_analysis: {traceback.format_exc()}")
+        return jsonify({'error': 'An internal error occurred'}), 500
+    finally:
+        db_session.close()
 
 
-def start_market_scan_task_status(task_id, status, progress=None, result=None, error=None):
-    """更新任务状态 - 保持原有签名"""
-    with task_lock:
-        if task_id in scan_tasks:
-            task = scan_tasks[task_id]
-            task['status'] = status
-            if progress is not None:
-                task['progress'] = progress
-            if result is not None:
-                task['result'] = result
-            if error is not None:
-                task['error'] = error
-            task['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+@app.route('/api/get_task_status/<string:task_id>', methods=['GET'])
+def get_task_status(task_id):
+    """Checks the status of a specific analysis task."""
+    db_session = get_session()
+    try:
+        task = db_session.query(AnalysisTask).filter_by(id=task_id).first()
+        if not task:
+            return jsonify({'error': 'Task not found'}), 404
+
+        if task.status == 'completed':
+            # For single stock, find the report associated with this task
+            if task.task_type == 'single_stock':
+                stock_code = task.parameters.get('stock_code')
+                market_type = task.parameters.get('market_type')
+                report = db_session.query(AiAnalysisReport).filter(
+                    AiAnalysisReport.stock_code == stock_code,
+                    AiAnalysisReport.market_type == market_type
+                ).order_by(AiAnalysisReport.created_at.desc()).first()
+                
+                if report:
+                    return jsonify({'status': 'completed', 'report': report.to_dict()})
+                else:
+                    return jsonify({'status': 'failed', 'error': 'Report not found after task completion.'})
+            else:
+                # For other task types like market_scan, the result is in the task object
+                return jsonify({'status': 'completed', 'result': task.result})
+
+        return jsonify({'status': task.status, 'task_id': task.id})
+
+    except Exception as e:
+        app.logger.error(f"Error in get_task_status: {traceback.format_exc()}")
+        return jsonify({'error': 'An internal error occurred'}), 500
+    finally:
+        db_session.close()
 
 
-def update_task_status(task_type, task_id, status, progress=None, result=None, error=None):
-    """更新任务状态"""
-    store = get_task_store(task_type)
-    with task_lock:
-        if task_id in store:
-            task = store[task_id]
-            task['status'] = status
-            if progress is not None:
-                task['progress'] = progress
-            if result is not None:
-                task['result'] = result
-            if error is not None:
-                task['error'] = error
-            task['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+@app.route('/api/get_historical_reports', methods=['GET'])
+def get_historical_reports():
+    """Fetches all historical analysis reports for a given stock."""
+    stock_code = request.args.get('stock_code')
+    market_type = request.args.get('market_type', 'A')
 
-            # 更新键索引的任务
-            if 'key' in task and task['key'] in store:
-                store[task['key']] = task
+    if not stock_code:
+        return jsonify({'error': 'Stock code is required'}), 400
 
+    db_session = get_session()
+    try:
+        reports = db_session.query(AiAnalysisReport).filter(
+            AiAnalysisReport.stock_code == stock_code,
+            AiAnalysisReport.market_type == market_type
+        ).order_by(AiAnalysisReport.report_date.desc(), AiAnalysisReport.report_hour.desc()).all()
 
-analysis_tasks = {}
+        return custom_jsonify([r.to_dict() for r in reports])
+    finally:
+        db_session.close()
 
 
-def get_or_create_analysis_task(stock_code, market_type='A'):
-    """获取或创建个股分析任务"""
-    # 创建一个键，用于查找现有任务
-    task_key = f"{stock_code}_{market_type}"
+@app.route('/api/save_note', methods=['POST'])
+def save_note():
+    """Saves a user note for a specific stock."""
+    data = request.get_json()
+    stock_code = data.get('stock_code')
+    market_type = data.get('market_type', 'A')
+    content = data.get('content')
+    # user_id would come from session/auth in a real multi-user app
+    user_id = 'default_user' 
 
-    with task_lock:
-        # 检查是否有现有任务
-        for task_id, task in analysis_tasks.items():
-            if task.get('key') == task_key:
-                # 检查任务是否仍然有效
-                if task['status'] in [TASK_PENDING, TASK_RUNNING]:
-                    return task_id, task, False
-                if task['status'] == TASK_COMPLETED and 'result' in task:
-                    # 任务已完成且有结果，重用它
-                    return task_id, task, False
+    if not all([stock_code, content]):
+        return jsonify({'error': 'Stock code and content are required'}), 400
 
-        # 创建新任务
-        task_id = generate_task_id()
-        task = {
-            'id': task_id,
-            'key': task_key,
-            'status': TASK_PENDING,
-            'progress': 0,
-            'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'params': {
-                'stock_code': stock_code,
-                'market_type': market_type
-            }
-        }
-
-        analysis_tasks[task_id] = task
-
-        return task_id, task, True
+    db_session = get_session()
+    try:
+        new_note = UserStockNote(
+            user_id=user_id,
+            stock_code=stock_code,
+            market_type=market_type,
+            content=content
+        )
+        db_session.add(new_note)
+        db_session.commit()
+        return jsonify({'success': True, 'note': new_note.to_dict()})
+    finally:
+        db_session.close()
 
 
-def update_analysis_task(task_id, status, progress=None, result=None, error=None):
-    """更新个股分析任务状态"""
-    with task_lock:
-        if task_id in analysis_tasks:
-            task = analysis_tasks[task_id]
-            task['status'] = status
-            if progress is not None:
-                task['progress'] = progress
-            if result is not None:
-                task['result'] = result
-            if error is not None:
-                task['error'] = error
-            task['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+@app.route('/api/get_notes', methods=['GET'])
+def get_notes():
+    """Fetches all notes for a given stock."""
+    stock_code = request.args.get('stock_code')
+    market_type = request.args.get('market_type', 'A')
+    user_id = 'default_user'
+
+    if not stock_code:
+        return jsonify({'error': 'Stock code is required'}), 400
+
+    db_session = get_session()
+    try:
+        notes = db_session.query(UserStockNote).filter_by(
+            user_id=user_id,
+            stock_code=stock_code,
+            market_type=market_type
+        ).order_by(UserStockNote.note_date.desc()).all()
+        return custom_jsonify([n.to_dict() for n in notes])
+    finally:
+        db_session.close()
+
+
+# =====================================================================
+#           Old and Deprecated Code To Be Removed/Refactored
+# =====================================================================
+
+# The old in-memory task management system is now removed.
+# The endpoints /api/start_stock_analysis, /api/analysis_status, /api/cancel_analysis,
+# /api/start_market_scan, /api/scan_status, /api/cancel_scan are deprecated
+# and have been removed to avoid conflicts with the new DB-based system.
+# The synchronous /api/enhanced_analysis is also replaced by the new async flow.
 
 
 # 定义自定义JSON编码器
@@ -390,10 +414,7 @@ class NumpyJSONEncoder(json.JSONEncoder):
 
 # 使用我们的编码器的自定义 jsonify 函数
 def custom_jsonify(data):
-    return app.response_class(
-        json.dumps(convert_numpy_types(data), cls=NumpyJSONEncoder),
-        mimetype='application/json'
-    )
+    return Response(NumpyJSONEncoder().encode(data), mimetype='application/json')
 
 
 # 保持API兼容的路由
@@ -502,8 +523,18 @@ def dashboard():
 @app.route('/stock_detail/<string:stock_code>')
 def stock_detail(stock_code):
     market_type = request.args.get('market_type', 'A')
-    return render_template('stock_detail.html', stock_code=stock_code, market_type=market_type)
-
+    # Fetch stock info to pass to the template
+    stock_info = analyzer.get_stock_info(stock_code, market_type)
+    stock_name = stock_info.get('股票名称', stock_code)
+    industry = stock_info.get('行业', '未知')
+    
+    return render_template(
+        'stock_detail.html', 
+        stock_code=stock_code, 
+        market_type=market_type,
+        stock_name=stock_name,
+        industry=industry
+    )
 
 @app.route('/portfolio')
 def portfolio():
@@ -551,212 +582,23 @@ def industry_analysis():
     return render_template('industry_analysis.html')
 
 
-def make_cache_key_with_stock():
-    """创建包含股票代码的自定义缓存键"""
+def make_cache_key_with_stock(*args, **kwargs):
+    """创建包含股票代码的缓存键，用于缓存"""
     path = request.path
-
-    # 从请求体中获取股票代码
-    stock_code = None
-    if request.is_json:
-        stock_code = request.json.get('stock_code')
-
-    # 构建包含股票代码的键
-    if stock_code:
-        return f"{path}_{stock_code}"
-    else:
-        return path
+    args_json = json.dumps(request.args, sort_keys=True)
+    return f'{path}?{args_json}'
 
 
-@app.route('/api/start_stock_analysis', methods=['POST'])
-def start_stock_analysis():
-    """启动个股分析任务"""
-    try:
-        data = request.json
-        stock_code = data.get('stock_code')
-        market_type = data.get('market_type', 'A')
-
-        if not stock_code:
-            return jsonify({'error': '请输入股票代码'}), 400
-
-        app.logger.info(f"准备分析股票: {stock_code}")
-
-        # 获取或创建任务
-        task_id, task, is_new = get_or_create_task(
-            'stock_analysis',
-            stock_code=stock_code,
-            market_type=market_type
-        )
-
-        # 如果是已完成的任务，直接返回结果
-        if task['status'] == TASK_COMPLETED and 'result' in task:
-            app.logger.info(f"使用缓存的分析结果: {stock_code}")
-            return jsonify({
-                'task_id': task_id,
-                'status': task['status'],
-                'result': task['result']
-            })
-
-        # 如果是新创建的任务，启动后台处理
-        if is_new:
-            app.logger.info(f"创建新的分析任务: {task_id}")
-
-            # 启动后台线程执行分析
-            def run_analysis():
-                try:
-                    update_task_status('stock_analysis', task_id, TASK_RUNNING, progress=10)
-
-                    # 执行分析
-                    result = analyzer.perform_enhanced_analysis(stock_code, market_type)
-
-                    # 更新任务状态为完成
-                    update_task_status('stock_analysis', task_id, TASK_COMPLETED, progress=100, result=result)
-                    app.logger.info(f"分析任务 {task_id} 完成")
-
-                except Exception as e:
-                    app.logger.error(f"分析任务 {task_id} 失败: {str(e)}")
-                    app.logger.error(traceback.format_exc())
-                    update_task_status('stock_analysis', task_id, TASK_FAILED, error=str(e))
-
-            # 启动后台线程
-            thread = threading.Thread(target=run_analysis)
-            thread.daemon = True
-            thread.start()
-
-        # 返回任务ID和状态
-        return jsonify({
-            'task_id': task_id,
-            'status': task['status'],
-            'message': f'已启动分析任务: {stock_code}'
-        })
-
-    except Exception as e:
-        app.logger.error(f"启动个股分析任务时出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/analysis_status/<task_id>', methods=['GET'])
-def get_analysis_status(task_id):
-    """获取个股分析任务状态"""
-    store = get_task_store('stock_analysis')
-    with task_lock:
-        if task_id not in store:
-            return jsonify({'error': '找不到指定的分析任务'}), 404
-
-        task = store[task_id]
-
-        # 基本状态信息
-        status = {
-            'id': task['id'],
-            'status': task['status'],
-            'progress': task.get('progress', 0),
-            'created_at': task['created_at'],
-            'updated_at': task['updated_at']
-        }
-
-        # 如果任务完成，包含结果
-        if task['status'] == TASK_COMPLETED and 'result' in task:
-            status['result'] = task['result']
-
-        # 如果任务失败，包含错误信息
-        if task['status'] == TASK_FAILED and 'error' in task:
-            status['error'] = task['error']
-
-        return custom_jsonify(status)
-
-
-@app.route('/api/cancel_analysis/<task_id>', methods=['POST'])
-def cancel_analysis(task_id):
-    """取消个股分析任务"""
-    store = get_task_store('stock_analysis')
-    with task_lock:
-        if task_id not in store:
-            return jsonify({'error': '找不到指定的分析任务'}), 404
-
-        task = store[task_id]
-
-        if task['status'] in [TASK_COMPLETED, TASK_FAILED]:
-            return jsonify({'message': '任务已完成或失败，无法取消'})
-
-        # 更新状态为失败
-        task['status'] = TASK_FAILED
-        task['error'] = '用户取消任务'
-        task['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        # 更新键索引的任务
-        if 'key' in task and task['key'] in store:
-            store[task['key']] = task
-
-        return jsonify({'message': '任务已取消'})
-
-
-# 保留原有API用于向后兼容
+# Deprecated - Use /api/request_analysis instead
 @app.route('/api/enhanced_analysis', methods=['POST'])
 def enhanced_analysis():
-    """原增强分析API的向后兼容版本"""
-    try:
-        data = request.json
-        stock_code = data.get('stock_code')
-        market_type = data.get('market_type', 'A')
-
-        if not stock_code:
-            return custom_jsonify({'error': '请输入股票代码'}), 400
-
-        # 调用新的任务系统，但模拟同步行为
-        # 这会导致和之前一样的超时问题，但保持兼容
-        timeout = 300
-        start_time = time.time()
-
-        # 获取或创建任务
-        task_id, task, is_new = get_or_create_task(
-            'stock_analysis',
-            stock_code=stock_code,
-            market_type=market_type
-        )
-
-        # 如果是已完成的任务，直接返回结果
-        if task['status'] == TASK_COMPLETED and 'result' in task:
-            app.logger.info(f"使用缓存的分析结果: {stock_code}")
-            return custom_jsonify({'result': task['result']})
-
-        # 启动分析（如果是新任务）
-        if is_new:
-            # 同步执行分析
-            try:
-                result = analyzer.perform_enhanced_analysis(stock_code, market_type)
-                update_task_status('stock_analysis', task_id, TASK_COMPLETED, progress=100, result=result)
-                app.logger.info(f"分析完成: {stock_code}，耗时 {time.time() - start_time:.2f} 秒")
-                return custom_jsonify({'result': result})
-            except Exception as e:
-                app.logger.error(f"分析过程中出错: {str(e)}")
-                update_task_status('stock_analysis', task_id, TASK_FAILED, error=str(e))
-                return custom_jsonify({'error': f'分析过程中出错: {str(e)}'}), 500
-        else:
-            # 已存在正在处理的任务，等待其完成
-            max_wait = timeout - (time.time() - start_time)
-            wait_interval = 0.5
-            waited = 0
-
-            while waited < max_wait:
-                with task_lock:
-                    current_task = store[task_id]
-                    if current_task['status'] == TASK_COMPLETED and 'result' in current_task:
-                        return custom_jsonify({'result': current_task['result']})
-                    if current_task['status'] == TASK_FAILED:
-                        error = current_task.get('error', '任务失败，无详细信息')
-                        return custom_jsonify({'error': error}), 500
-
-                time.sleep(wait_interval)
-                waited += wait_interval
-
-            # 超时
-            return custom_jsonify({'error': '处理超时，请稍后重试'}), 504
-
-    except Exception as e:
-        app.logger.error(f"执行增强版分析时出错: {traceback.format_exc()}")
-        return custom_jsonify({'error': str(e)}), 500
+    """
+    This endpoint is now a wrapper around the new asynchronous system.
+    It triggers an analysis request and returns the initial status.
+    """
+    return request_analysis()
 
 
-# 添加在web_server.py主代码中
 @app.errorhandler(404)
 def not_found(error):
     """处理404错误"""
@@ -910,149 +752,84 @@ def get_stock_data():
 @app.route('/api/start_market_scan', methods=['POST'])
 def start_market_scan():
     """启动市场扫描任务"""
+    data = request.json
+    params = {
+        'stock_list': data.get('stock_list', []),
+        'min_score': data.get('min_score', 60),
+        'market_type': data.get('market_type', 'A')
+    }
+
+    if not params['stock_list']:
+        return jsonify({'error': '请提供股票列表'}), 400
+
+    # 限制股票数量，避免过长处理时间
+    if len(params['stock_list']) > 100:
+        app.logger.warning(f"股票列表过长 ({len(params['stock_list'])}只)，截取前100只")
+        params['stock_list'] = params['stock_list'][:100]
+
+    db_session = get_session()
     try:
-        data = request.json
-        stock_list = data.get('stock_list', [])
-        min_score = data.get('min_score', 60)
-        market_type = data.get('market_type', 'A')
-
-        if not stock_list:
-            return jsonify({'error': '请提供股票列表'}), 400
-
-        # 限制股票数量，避免过长处理时间
-        if len(stock_list) > 100:
-            app.logger.warning(f"股票列表过长 ({len(stock_list)}只)，截取前100只")
-            stock_list = stock_list[:100]
-
-        # 创建新任务
         task_id = generate_task_id()
-        task = {
-            'id': task_id,
-            'status': TASK_PENDING,
-            'progress': 0,
-            'total': len(stock_list),
-            'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'params': {
-                'stock_list': stock_list,
-                'min_score': min_score,
-                'market_type': market_type
-            }
-        }
-
-        with task_lock:
-            scan_tasks[task_id] = task
-
-        # 启动后台线程执行扫描
-        def run_scan():
-            try:
-                start_market_scan_task_status(task_id, TASK_RUNNING)
-
-                # 执行分批处理
-                results = []
-                total = len(stock_list)
-                batch_size = 10
-
-                for i in range(0, total, batch_size):
-                    if task_id not in scan_tasks or scan_tasks[task_id]['status'] != TASK_RUNNING:
-                        # 任务被取消
-                        app.logger.info(f"扫描任务 {task_id} 被取消")
-                        return
-
-                    batch = stock_list[i:i + batch_size]
-                    batch_results = []
-
-                    for stock_code in batch:
-                        try:
-                            report = analyzer.quick_analyze_stock(stock_code, market_type)
-                            if report['score'] >= min_score:
-                                batch_results.append(report)
-                        except Exception as e:
-                            app.logger.error(f"分析股票 {stock_code} 时出错: {str(e)}")
-                            continue
-
-                    results.extend(batch_results)
-
-                    # 更新进度
-                    progress = min(100, int((i + len(batch)) / total * 100))
-                    start_market_scan_task_status(task_id, TASK_RUNNING, progress=progress)
-
-                # 按得分排序
-                results.sort(key=lambda x: x['score'], reverse=True)
-
-                # 更新任务状态为完成
-                start_market_scan_task_status(task_id, TASK_COMPLETED, progress=100, result=results)
-                app.logger.info(f"扫描任务 {task_id} 完成，找到 {len(results)} 只符合条件的股票")
-
-            except Exception as e:
-                app.logger.error(f"扫描任务 {task_id} 失败: {str(e)}")
-                app.logger.error(traceback.format_exc())
-                start_market_scan_task_status(task_id, TASK_FAILED, error=str(e))
-
-        # 启动后台线程
-        thread = threading.Thread(target=run_scan)
-        thread.daemon = True
-        thread.start()
-
-        return jsonify({
-            'task_id': task_id,
-            'status': 'pending',
-            'message': f'已启动扫描任务，正在处理 {len(stock_list)} 只股票'
-        })
-
+        task = AnalysisTask(
+            id=task_id,
+            task_type='market_scan',
+            status='pending',
+            parameters=params
+        )
+        db_session.add(task)
+        db_session.commit()
+        db_session.close()
+        return jsonify({'success': True, 'message': '市场扫描任务已启动', 'task_id': task_id})
     except Exception as e:
         app.logger.error(f"启动市场扫描任务时出错: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        db_session.rollback()
+        db_session.close()
+        return jsonify({'success': False, 'message': f'启动扫描任务失败: {str(e)}'}), 500
 
 
-@app.route('/api/scan_status/<task_id>', methods=['GET'])
-def get_scan_status(task_id):
+@app.route('/api/market_scan/status/<string:task_id>', methods=['GET'])
+def get_market_scan_status(task_id):
     """获取扫描任务状态"""
-    with task_lock:
-        if task_id not in scan_tasks:
+    db_session = get_session()
+    try:
+        task = db_session.query(AnalysisTask).filter_by(id=task_id).first()
+        if not task:
             return jsonify({'error': '找不到指定的扫描任务'}), 404
-
-        task = scan_tasks[task_id]
 
         # 基本状态信息
-        status = {
-            'id': task['id'],
-            'status': task['status'],
-            'progress': task.get('progress', 0),
-            'total': task.get('total', 0),
-            'created_at': task['created_at'],
-            'updated_at': task['updated_at']
-        }
+        status_info = task.to_dict()
 
-        # 如果任务完成，包含结果
-        if task['status'] == TASK_COMPLETED and 'result' in task:
-            status['result'] = task['result']
-
-        # 如果任务失败，包含错误信息
-        if task['status'] == TASK_FAILED and 'error' in task:
-            status['error'] = task['error']
-
-        return custom_jsonify(status)
+        return custom_jsonify(status_info)
+    except Exception as e:
+        app.logger.error(f"获取市场扫描任务状态时出错: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        db_session.close()
 
 
-@app.route('/api/cancel_scan/<task_id>', methods=['POST'])
-def cancel_scan(task_id):
+@app.route('/api/market_scan/cancel/<string:task_id>', methods=['POST'])
+def cancel_market_scan(task_id):
     """取消扫描任务"""
-    with task_lock:
-        if task_id not in scan_tasks:
+    db_session = get_session()
+    try:
+        task = db_session.query(AnalysisTask).filter_by(id=task_id).first()
+        if not task:
             return jsonify({'error': '找不到指定的扫描任务'}), 404
 
-        task = scan_tasks[task_id]
-
-        if task['status'] in [TASK_COMPLETED, TASK_FAILED]:
+        if task.status in ['completed', 'failed']:
             return jsonify({'message': '任务已完成或失败，无法取消'})
 
         # 更新状态为失败
-        task['status'] = TASK_FAILED
-        task['error'] = '用户取消任务'
-        task['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
+        task.status = 'failed'
+        task.error = '用户取消任务'
+        task.updated_at = datetime.now()
+        db_session.commit()
         return jsonify({'message': '任务已取消'})
+    except Exception as e:
+        app.logger.error(f"取消市场扫描任务时出错: {traceback.format_exc()}")
+        db_session.rollback()
+        db_session.close()
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/index_stocks', methods=['GET'])
@@ -1113,70 +890,42 @@ def get_industry_stocks():
         return jsonify({'error': str(e)}), 500
 
 
-# 添加到web_server.py
-def clean_old_tasks():
-    """清理旧的扫描任务"""
-    with task_lock:
-        now = datetime.now()
-        to_delete = []
+@app.route('/api/industry_stocks', methods=['GET'])
+def get_industry_stocks_api():
+    industry_name = request.args.get('industry')
+    if not industry_name:
+        return jsonify({"error": "Industry name is required"}), 400
+    
+    try:
+        stocks = industry_analyzer.get_industry_stocks(industry_name)
+        return jsonify(stocks)
+    except Exception as e:
+        app.logger.error(f"Error getting industry stocks for {industry_name}: {e}")
+        return jsonify({"error": str(e)}), 500
 
-        for task_id, task in scan_tasks.items():
-            # 解析更新时间
-            try:
-                updated_at = datetime.strptime(task['updated_at'], '%Y-%m-%d %H:%M:%S')
-                # 如果任务完成或失败且超过1小时，或者任务状态异常且超过3小时，清理它
-                if ((task['status'] in [TASK_COMPLETED, TASK_FAILED] and
-                     (now - updated_at).total_seconds() > 3600) or
-                        ((now - updated_at).total_seconds() > 10800)):
-                    to_delete.append(task_id)
-            except:
-                # 日期解析错误，添加到删除列表
-                to_delete.append(task_id)
+@app.route('/api/industry_analysis/<industry_name>', methods=['GET'])
+def get_industry_analysis_api(industry_name):
+    """获取行业分析数据"""
+    force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
+    
+    try:
+        # 使用缓存
+        cache_key = f"industry_analysis_{industry_name}"
+        if not force_refresh:
+            cached_data = cache.get(cache_key)
+            if cached_data:
+                return jsonify({'success': True, 'data': cached_data})
 
-        # 删除旧任务
-        for task_id in to_delete:
-            del scan_tasks[task_id]
-
-        return len(to_delete)
-
-
-# 修改 run_task_cleaner 函数，使其每 5 分钟运行一次并在 16:30 左右清理所有缓存
-def run_task_cleaner():
-    """定期运行任务清理，并在每天 16:30 左右清理所有缓存"""
-    while True:
-        try:
-            now = datetime.now()
-            # 判断是否在收盘时间附近（16:25-16:35）
-            is_market_close_time = (now.hour == 16 and 25 <= now.minute <= 35)
-
-            cleaned = clean_old_tasks()
-
-            # 如果是收盘时间，清理所有缓存
-            if is_market_close_time:
-                # 清理分析器的数据缓存
-                analyzer.data_cache.clear()
-
-                # 清理 Flask 缓存
-                cache.clear()
-
-                # 清理任务存储
-                with task_lock:
-                    for task_type in tasks:
-                        task_store = tasks[task_type]
-                        completed_tasks = [task_id for task_id, task in task_store.items()
-                                           if task['status'] == TASK_COMPLETED]
-                        for task_id in completed_tasks:
-                            del task_store[task_id]
-
-                app.logger.info("市场收盘时间检测到，已清理所有缓存数据")
-
-            if cleaned > 0:
-                app.logger.info(f"清理了 {cleaned} 个旧的扫描任务")
-        except Exception as e:
-            app.logger.error(f"任务清理出错: {str(e)}")
-
-        # 每 5 分钟运行一次，而不是每小时
-        time.sleep(600)
+        # 获取数据
+        analysis_data = industry_analyzer.get_full_analysis(industry_name)
+        
+        # 设置缓存
+        cache.set(cache_key, analysis_data, timeout=3600) # 缓存1小时
+        
+        return jsonify({'success': True, 'data': analysis_data})
+    except Exception as e:
+        app.logger.error(f"获取行业 '{industry_name}' 分析数据时出错: {traceback.format_exc()}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # 基本面分析路由
@@ -1185,12 +934,21 @@ def api_fundamental_analysis():
     try:
         data = request.json
         stock_code = data.get('stock_code')
+        market_type = data.get('market_type', 'A') # Get market_type from request
 
         if not stock_code:
             return jsonify({'error': '请提供股票代码'}), 400
 
-        # 获取基本面分析结果
-        result = fundamental_analyzer.calculate_fundamental_score(stock_code)
+        # Get the fundamental analysis result
+        result = fundamental_analyzer.calculate_fundamental_score(stock_code, market_type)
+        
+        # Get the stock's basic info using our centralized function
+        stock_info = analyzer.get_stock_info(stock_code, market_type)
+        
+        # Add name and industry to the result object for the frontend
+        if 'details' in result and 'indicators' in result['details']:
+            result['details']['indicators']['stock_name'] = stock_info.get('股票名称', stock_code)
+            result['details']['indicators']['industry'] = stock_info.get('行业', '未知')
 
         return custom_jsonify(result)
     except Exception as e:
@@ -1731,11 +1489,6 @@ def get_market_options():
         app.logger.error(f"获取市场选项失败: {e}")
         return jsonify({"error": "获取市场选项失败"}), 500
 
-
-# 在应用启动时启动清理线程（保持原有代码不变）
-cleaner_thread = threading.Thread(target=run_task_cleaner)
-cleaner_thread.daemon = True
-cleaner_thread.start()
 
 if __name__ == '__main__':
     # 将 host 设置为 '0.0.0.0' 使其支持所有网络接口访问
