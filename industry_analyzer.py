@@ -535,3 +535,79 @@ class IndustryAnalyzer:
         except Exception as e:
             self.logger.error(f"比较行业表现时出错: {str(e)}")
             return {"error": f"比较行业表现时出错: {str(e)}"}
+
+    def get_full_analysis(self, industry_name):
+        """获取完整的行业分析数据"""
+        try:
+            # 这里是模拟数据，实际应从API或数据库获取
+            # 在将来的版本中，我们将实现真实的数据获取逻辑
+
+            # 模拟AI分析
+            ai_analysis = f"""
+### 行业趋势分析
+根据最近的市场数据，**{industry_name}** 行业呈现出积极的增长势头。主要驱动因素包括技术创新和市场需求的增加。
+
+### 估值分析
+目前行业整体估值处于历史中位水平，具有一定的安全边际。龙头公司的估值相对较高，但与其增长预期相匹配。
+
+### 风险与机遇
+- **机遇**: 新技术应用（如AI）可能带来新的增长点。
+- **风险**: 宏观经济波动和供应链问题是短期内需要关注的主要风险。
+            """
+
+            # 模拟图表数据
+            index_chart_data = {
+                'dates': [f'2023-01-{d:02}' for d in range(1, 11)],
+                'values': [100, 102, 105, 103, 108, 110, 112, 115, 113, 118]
+            }
+            valuation_chart_data = {
+                'dates': [f'2023-01-{d:02}' for d in range(1, 11)],
+                'values': [25, 26, 28, 27, 29, 30, 31, 32, 30, 33]
+            }
+            
+            # 模拟龙头股
+            leader_stocks = [
+                {'code': '600519', 'name': '贵州茅台', 'price': 1650.00, 'change_pct': 1.5, 'turnover_rate': 0.5, 'pe_ttm': 35.0},
+                {'code': '000858', 'name': '五粮液', 'price': 150.00, 'change_pct': 2.1, 'turnover_rate': 0.8, 'pe_ttm': 28.0}
+            ]
+
+            return {
+                'summary': f'这是关于 {industry_name} 行业的简要总结。该行业是市场的重要组成部分，近期表现稳定。',
+                'ai_analysis': ai_analysis,
+                'leader_stocks': self.get_industry_stocks(industry_name)[:5], # 获取真实成分股的前5个作为模拟龙头
+                'index_chart_data': index_chart_data,
+                'valuation_chart_data': valuation_chart_data,
+            }
+        except Exception as e:
+            self.logger.error(f"生成行业 '{industry_name}' 完整分析报告时出错: {e}")
+            raise
+
+if __name__ == '__main__':
+    analyzer = IndustryAnalyzer()
+
+    # 测试获取行业列表
+    print("测试获取行业列表:")
+    print(analyzer.get_industry_list())
+
+    # 测试获取行业资金流向
+    print("\n测试获取行业资金流向 (即时):")
+    print(analyzer.get_industry_fund_flow())
+
+    # 测试获取行业成分股
+    print("\n测试获取行业成分股 (贵州茅台):")
+    print(analyzer.get_industry_stocks("贵州茅台"))
+
+    # 测试获取行业详细信息
+    print("\n测试获取行业详细信息 (贵州茅台):")
+    print(analyzer.get_industry_detail("贵州茅台"))
+
+    # 测试比较行业表现
+    print("\n测试比较行业表现:")
+    print(analyzer.compare_industries())
+
+    # 测试获取完整分析报告
+    print("\n测试获取完整分析报告 (贵州茅台):")
+    try:
+        print(analyzer.get_full_analysis("贵州茅台"))
+    except Exception as e:
+        print(f"获取完整分析报告失败: {e}")

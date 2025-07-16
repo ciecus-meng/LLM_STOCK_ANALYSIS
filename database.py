@@ -87,19 +87,27 @@ class Portfolio(Base):
 class AnalysisTask(Base):
     __tablename__ = 'analysis_tasks'
 
-    id = Column(Integer, primary_key=True)
-    stock_code = Column(String(10), nullable=False, index=True)
-    market_type = Column(String(5), nullable=False)
+    id = Column(String(36), primary_key=True)
+    task_type = Column(String(50), nullable=False, index=True)
     status = Column(String(20), default='pending', index=True)
+    parameters = Column(JSON)
+    progress = Column(Integer, default=0)
+    total = Column(Integer, default=0)
+    result = Column(JSON)
+    error = Column(Text)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     def to_dict(self):
         return {
             'id': self.id,
-            'stock_code': self.stock_code,
-            'market_type': self.market_type,
+            'task_type': self.task_type,
             'status': self.status,
+            'parameters': self.parameters,
+            'progress': self.progress,
+            'total': self.total,
+            'result': self.result,
+            'error': self.error,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
             'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S')
         }

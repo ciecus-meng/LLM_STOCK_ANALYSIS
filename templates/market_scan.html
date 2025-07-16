@@ -334,7 +334,7 @@
 
             function checkStatus() {
                 $.ajax({
-                    url: `/api/scan_status/${taskId}`,
+                    url: `/api/market_scan/status/${taskId}`,
                     type: 'GET',
                     success: function(response) {
                         // 更新计时和进度
@@ -353,12 +353,12 @@
                             clearInterval(pollInterval);
 
                             // 显示结果
-                            renderResults(response.result || []);
+                            renderResults(response.result.qualified_stocks || []);
                             $('#scan-loading').hide();
                             $('#scan-results').show();
 
                             // 如果结果为空，显示提示
-                            if (!response.result || response.result.length === 0) {
+                            if (!response.result.qualified_stocks || response.result.qualified_stocks.length === 0) {
                                 $('#results-table').html('<tr><td colspan="11" class="text-center">未找到符合条件的股票</td></tr>');
                                 $('#result-count').text('0');
                                 $('#export-btn').hide();
@@ -443,8 +443,8 @@
                         <td>${result.stock_name || '未知'}</td>
                         <td>${result.industry || '-'}</td>
                         <td><span class="badge ${scoreClass}">${result.score}</span></td>
-                        <td>${formatNumber(result.price)}</td>
-                        <td class="${priceChangeClass}">${priceChangeIcon} ${formatPercent(result.price_change)}</td>
+                        <td>${formatNumber(result.latest_close)}</td>
+                        <td class="${priceChangeClass}">${priceChangeIcon} ${formatPercent(result.change_pct)}</td>
                         <td>${formatNumber(result.rsi)}</td>
                         <td class="${maTrendClass}">${maTrendIcon} ${result.ma_trend}</td>
                         <td>${result.volume_status}</td>

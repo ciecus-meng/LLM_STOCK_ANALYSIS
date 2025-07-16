@@ -1544,59 +1544,15 @@ class StockAnalyzer:
 
         return recommendations
 
-    # def quick_analyze_stock(self, stock_code, market_type='A'):
-    #     """快速分析股票，用于市场扫描"""
-    #     try:
-    #         # 获取股票数据
-    #         df = self.get_stock_data(stock_code, market_type)
-
-    #         # 计算技术指标
-    #         df = self.calculate_indicators(df)
-
-    #         # 简化评分计算
-    #         score = self.calculate_score(df)
-
-    #         # 获取最新数据
-    #         latest = df.iloc[-1]
-    #         prev = df.iloc[-2] if len(df) > 1 else latest
-
-    #         # 尝试获取股票名称和行业
-    #         try:
-    #             stock_info = self.get_stock_info(stock_code)
-    #             stock_name = stock_info.get('股票名称', '未知')
-    #             industry = stock_info.get('行业', '未知')
-    #         except:
-    #             stock_name = '未知'
-    #             industry = '未知'
-
-    #         # 生成简化报告
-    #         report = {
-    #             'stock_code': stock_code,
-    #             'stock_name': stock_name,
-    #             'industry': industry,
-    #             'analysis_date': datetime.now().strftime('%Y-%m-%d'),
-    #             'score': score,
-    #             'price': float(latest['close']),
-    #             'price_change': float((latest['close'] - prev['close']) / prev['close'] * 100),
-    #             'ma_trend': 'UP' if latest['MA5'] > latest['MA20'] else 'DOWN',
-    #             'rsi': float(latest['RSI']),
-    #             'macd_signal': 'BUY' if latest['MACD'] > latest['Signal'] else 'SELL',
-    #             'volume_status': '放量' if latest['Volume_Ratio'] > 1.5 else '平量',
-    #             'recommendation': self.get_recommendation(score)
-    #         }
-
-    #         return report
-    #     except Exception as e:
-    #         self.logger.error(f"快速分析股票 {stock_code} 时出错: {str(e)}")
-    #         raise
-
     def quick_analyze_stock(self, stock_code, market_type='A'):
-        """快速分析股票，用于市场扫描"""
+        """
+        快速分析股票，只返回关键指标和评分，不调用AI
+        """
         try:
-            # 获取股票数据
-            df = self.get_stock_data(stock_code, market_type)
+            df = self.get_stock_data(stock_code, market_type, start_date=(datetime.now() - timedelta(days=90)).strftime('%Y%m%d'))
+            if df.empty:
+                return {'error': '无法获取数据', 'score': 0}
 
-            # 计算技术指标
             df = self.calculate_indicators(df)
 
             # 简化评分计算
@@ -1643,7 +1599,9 @@ class StockAnalyzer:
     # ======================== 新增功能 ========================#
 
     def get_stock_info(self, stock_code, market_type='A'):
-        """获取单个股票的基本信息，如名称、行业等"""
+        """
+        获取股票基本信息，优先从数据库获取，失败则从API获取
+        """
         cache_key = f"info_{stock_code}_{market_type}"
         # if cache_key in self.data_cache:
         #     return self.data_cache[cache_key]
@@ -1938,40 +1896,34 @@ class StockAnalyzer:
             return {'total': 0, 'trend': 0, 'indicators': 0, 'support_resistance': 0, 'volatility_volume': 0}
 
     def perform_enhanced_analysis(self, stock_code, market_type='A'):
-        """执行增强版分析"""
+        """
+        执行增强版分析，返回结构化报告
+        """
+        self.logger.info(f"开始执行股票 {stock_code} 的增强分析")
         try:
-            # 记录开始时间，便于性能分析
-            start_time = time.time()
-            self.logger.info(f"开始执行股票 {stock_code} 的增强分析")
-
-            # 获取股票数据
+            # 1. 获取股票数据
             df = self.get_stock_data(stock_code, market_type)
-            data_time = time.time()
-            self.logger.info(f"获取股票数据耗时: {data_time - start_time:.2f}秒")
+            if df.empty:
+                self.logger.warning(f"无法获取 {stock_code} 的数据，分析中止")
+                raise Exception("无法获取或数据为空")
 
-            # 计算技术指标
+            # 2. 计算技术指标
             df = self.calculate_indicators(df)
-            indicator_time = time.time()
-            self.logger.info(f"计算技术指标耗时: {indicator_time - data_time:.2f}秒")
 
-            # 获取最新数据
+            # 3. 获取最新数据
             latest = df.iloc[-1]
             prev = df.iloc[-2] if len(df) > 1 else latest
 
-            # 获取支撑压力位
+            # 4. 获取支撑压力位
             sr_levels = self.identify_support_resistance(df)
 
-            # 计算技术面评分
+            # 5. 计算技术面评分
             technical_score = self.calculate_technical_score(df)
 
-            # 获取股票信息
-            stock_info = self.get_stock_info(stock_code)
+            # 6. 获取股票信息
+            stock_info = self.get_stock_info(stock_code, market_type)
 
-            # 确保technical_score包含必要的字段
-            if 'total' not in technical_score:
-                technical_score['total'] = 0
-
-            # 生成增强版报告
+            # 7. 生成增强版报告
             enhanced_report = {
                 'basic_info': {
                     'stock_code': stock_code,
@@ -2022,58 +1974,13 @@ class StockAnalyzer:
             # 最后检查并修复报告结构
             self._validate_and_fix_report(enhanced_report)
 
-            # 在函数结束时记录总耗时
-            end_time = time.time()
-            self.logger.info(f"执行增强分析总耗时: {end_time - start_time:.2f}秒")
-
             return enhanced_report
 
         except Exception as e:
-            self.logger.error(f"执行增强版分析时出错: {str(e)}")
+            self.logger.error(f"执行增强版分析时出错: {e}")
             self.logger.error(traceback.format_exc())
-
-            # 返回基础错误报告
-            return {
-                'basic_info': {
-                    'stock_code': stock_code,
-                    'stock_name': '分析失败',
-                    'industry': '未知',
-                    'analysis_date': datetime.now().strftime('%Y-%m-%d')
-                },
-                'price_data': {
-                    'current_price': 0.0,
-                    'price_change': 0.0,
-                    'price_change_value': 0.0
-                },
-                'technical_analysis': {
-                    'trend': {
-                        'ma_trend': 'UNKNOWN',
-                        'ma_status': '未知',
-                        'ma_values': {'ma5': 0.0, 'ma20': 0.0, 'ma60': 0.0}
-                    },
-                    'indicators': {
-                        'rsi': 50.0,
-                        'macd': 0.0,
-                        'macd_signal': 0.0,
-                        'macd_histogram': 0.0,
-                        'volatility': 0.0
-                    },
-                    'volume': {
-                        'current_volume': 0.0,
-                        'volume_ratio': 0.0,
-                        'volume_status': 'NORMAL'
-                    },
-                    'support_resistance': {
-                        'support_levels': {'short_term': [], 'medium_term': []},
-                        'resistance_levels': {'short_term': [], 'medium_term': []}
-                    }
-                },
-                'scores': {'total': 0},
-                'recommendation': {'action': '分析出错，无法提供建议'},
-                'ai_analysis': f"分析过程中出错: {str(e)}"
-            }
-
-            return error_report
+            # 将异常重新抛出，以便上层调用者（如后台任务）可以捕获
+            raise
 
     # 添加一个辅助方法确保报告结构完整
     def _validate_and_fix_report(self, report):
